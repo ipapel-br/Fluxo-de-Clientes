@@ -3,9 +3,6 @@ import { Mail, Sparkles, LogIn, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,17 +35,17 @@ export default function LoginDialog() {
 
   const formContent = (
     <div className="relative z-10 space-y-4">
-      <DialogHeader className="text-center pb-1">
+      <div className="text-center pb-1 space-y-1.5">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-2 shadow-xs">
           <Sparkles size={22} />
         </div>
-        <DialogTitle className="text-xl font-bold text-center">
+        <h2 className="text-xl font-bold text-center text-foreground tracking-tight">
           Acesso ao Fluxo de Clientes
-        </DialogTitle>
-        <DialogDescription className="text-xs text-center">
+        </h2>
+        <p className="text-xs text-center text-muted-foreground">
           Acesso restrito para colaboradores autorizados. Informe seu e-mail corporativo.
-        </DialogDescription>
-      </DialogHeader>
+        </p>
+      </div>
 
       {erro && (
         <div className="p-3 text-xs rounded-lg bg-destructive/10 text-destructive font-medium border border-destructive/20 flex items-start gap-2 leading-relaxed animate-in fade-in">
