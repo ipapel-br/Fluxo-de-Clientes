@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
+const rawUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
+
+// Limpar /rest/v1/ ou barra final se tiver sido colada por engano
+const supabaseUrl = rawUrl
+  ? rawUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '')
+  : '';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
