@@ -19,3 +19,4 @@ Start with `README.md` for setup and local development commands.
 - Data is stored in the browser's `localStorage`; do not introduce a remote backend unless the user explicitly requests one.
 - Keep storage migrations backward-compatible when changing persisted record shapes.
 - Run the relevant checks from `package.json` before finishing code changes.
+- **Design System**: All UI components and screens MUST follow the Shadcn UI standard (`@/components/ui/*`) and Tailwind semantic tokens as detailed in `DESIGN_SYSTEM.md`. Never introduce unstyled raw HTML elements when a Shadcn component is available.

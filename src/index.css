@@ -90,3 +90,51 @@
     @apply bg-background text-foreground font-body;
   }
 }
+
+@keyframes border-beam {
+  0% {
+    offset-distance: 0%;
+  }
+  100% {
+    offset-distance: 100%;
+  }
+}
+
+.magicui-border-beam {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: calc(var(--border-width, 1.5) * 1px) solid transparent;
+  -webkit-mask: linear-gradient(transparent, transparent), linear-gradient(#fff, #fff);
+  -webkit-mask-clip: padding-box, border-box;
+  -webkit-mask-composite: source-in, xor;
+  mask: linear-gradient(transparent, transparent), linear-gradient(#fff, #fff);
+  mask-clip: padding-box, border-box;
+  mask-composite: exclude;
+}
+
+.magicui-border-beam::after {
+  content: "";
+  position: absolute;
+  aspect-ratio: 1 / 1;
+  width: calc(var(--size, 200) * 1px);
+  animation: border-beam calc(var(--duration, 8) * 1s) infinite linear;
+  animation-delay: var(--delay, 0s);
+  background: linear-gradient(to left, var(--color-from, #ffaa40), var(--color-to, #9c40ff), transparent);
+  offset-anchor: calc(var(--anchor, 90) * 1%) 50%;
+  offset-path: rect(0 auto auto 0 round calc(var(--size, 200) * 1px));
+}
+
+.magicui-border-beam-reverse::after {
+  animation-direction: reverse;
+}
+
+@keyframes border-beam-svg {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -2000;
+  }
+}

@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, createSupabaseEntityApi } from './supabaseClient';
+import { isSupabaseConfigured, createSupabaseEntityApi, normalizeDemanda, normalizeUsuario } from './supabaseClient';
 
 const STORAGE_KEY = 'fluxo-clientes:v1';
 const LEGACY_STORAGE_KEYS = ['fluxo-clientes.standalone.v1', 'fluxo-clientes-local-state'];
@@ -26,23 +26,101 @@ const defaultStatuses = () => {
   ];
 };
 
-const initialState = () => ({ demandas: [], statuses: defaultStatuses() });
+const defaultUsuarios = () => {
+  const timestamp = now();
+  return [
+    {
+      id: 'usuario_admin_alan',
+      nome: 'Alan Santos',
+      email: 'alan.d.santos2021@gmail.com',
+      role: 'admin',
+      status: 'ativo',
+      permissoes_extras: {},
+      created_date: timestamp,
+      updated_date: timestamp,
+      last_access_at: timestamp,
+    },
+    {
+      id: 'usuario_admin_master',
+      nome: 'Administrador',
+      email: 'admin@fluxodeclientes.com',
+      role: 'admin',
+      status: 'ativo',
+      permissoes_extras: {},
+      created_date: timestamp,
+      updated_date: timestamp,
+      last_access_at: timestamp,
+    },
+  ];
+};
+
+const defaultConfiguracao = () => [
+  { id: 'config_geral', seller_view_mode: 'all', updated_at: now() },
+];
+
+const initialState = () => ({
+  demandas: [],
+  statuses: defaultStatuses(),
+  usuarios: defaultUsuarios(),
+  audit_logs: [],
+  configuracoes: defaultConfiguracao(),
+});
 
 function normalizeState(value) {
   const demandas = Array.isArray(value?.demandas)
-    ? value.demandas
+    ? value.demandas.map(normalizeDemanda)
     : Array.isArray(value?.data?.Demanda)
-      ? value.data.Demanda
+      ? value.data.Demanda.map(normalizeDemanda)
       : [];
   const statuses = Array.isArray(value?.statuses)
     ? value.statuses
     : Array.isArray(value?.data?.Status)
       ? value.data.Status
       : [];
+  let usuarios = Array.isArray(value?.usuarios)
+    ? value.usuarios.map(normalizeUsuario)
+    : Array.isArray(value?.data?.Usuario)
+      ? value.data.Usuario.map(normalizeUsuario)
+      : defaultUsuarios();
+
+  // Garantir que alan.d.santos2021@gmail.com esteja presente e com perfil admin
+  const alanEmail = 'alan.d.santos2021@gmail.com';
+  const alanIndex = usuarios.findIndex(
+    (u) => (u.email || '').toLowerCase().trim() === alanEmail
+  );
+  if (alanIndex >= 0) {
+    usuarios[alanIndex] = {
+      ...usuarios[alanIndex],
+      role: 'admin',
+      status: 'ativo',
+    };
+  } else {
+    usuarios.unshift({
+      id: 'usuario_admin_alan',
+      nome: 'Alan Santos',
+      email: alanEmail,
+      role: 'admin',
+      status: 'ativo',
+      permissoes_extras: {},
+      created_date: now(),
+      updated_date: now(),
+      last_access_at: now(),
+    });
+  }
+
+  const audit_logs = Array.isArray(value?.audit_logs)
+    ? value.audit_logs
+    : [];
+  const configuracoes = Array.isArray(value?.configuracoes)
+    ? value.configuracoes
+    : defaultConfiguracao();
 
   return {
     demandas: clone(demandas),
     statuses: statuses.length > 0 ? clone(statuses) : defaultStatuses(),
+    usuarios: usuarios.length > 0 ? clone(usuarios) : defaultUsuarios(),
+    audit_logs: clone(audit_logs),
+    configuracoes: clone(configuracoes),
   };
 }
 
@@ -57,7 +135,7 @@ function readState() {
       if (key !== STORAGE_KEY) writeState(state);
       return state;
     } catch {
-      // Ignore malformed values and try the next compatible storage key.
+      // Ignore malformed values
     }
   }
 
@@ -90,20 +168,35 @@ function sortRecords(records, sortKey) {
   });
 }
 
+const COLLECTION_MAP = {
+  Demanda: 'demandas',
+  Usuario: 'usuarios',
+  Status: 'statuses',
+  AuditLog: 'audit_logs',
+  Configuracao: 'configuracoes',
+};
+
 function createLocalStorageEntityApi(entityName) {
-  const collectionKey = entityName === 'Demanda' ? 'demandas' : 'statuses';
+  const collectionKey = COLLECTION_MAP[entityName] || entityName.toLowerCase();
   const idPrefix = entityName.toLowerCase();
 
   return {
-    async list(sortKey = 'ordem', limit = 500, skip = 0) {
-      const collection = readState()[collectionKey];
-      return clone(sortRecords(collection, sortKey).slice(skip, skip + limit));
+    async list(sortKey = 'nome', limit = 500, skip = 0) {
+      const collection = readState()[collectionKey] || [];
+      const sorted = sortRecords(collection, sortKey).slice(skip, skip + limit);
+      if (entityName === 'Demanda') return clone(sorted.map(normalizeDemanda));
+      if (entityName === 'Usuario') return clone(sorted.map(normalizeUsuario));
+      return clone(sorted);
     },
 
     async create(data) {
       const state = readState();
       const timestamp = now();
-      const record = { ...clone(data), id: data.id || createId(idPrefix), created_date: timestamp, updated_date: timestamp };
+      let record = { ...clone(data), id: data.id || createId(idPrefix), created_date: timestamp, updated_date: timestamp };
+      if (entityName === 'Demanda') record = normalizeDemanda(record);
+      if (entityName === 'Usuario') record = normalizeUsuario(record);
+
+      state[collectionKey] = state[collectionKey] || [];
       state[collectionKey].push(record);
       writeState(state);
       return clone(record);
@@ -111,9 +204,22 @@ function createLocalStorageEntityApi(entityName) {
 
     async update(id, patch) {
       const state = readState();
+      state[collectionKey] = state[collectionKey] || [];
       const index = state[collectionKey].findIndex((item) => item.id === id);
-      if (index < 0) throw new Error(`${entityName} não encontrado.`);
-      const updated = { ...state[collectionKey][index], ...clone(patch), id, updated_date: now() };
+      if (index < 0) {
+        // Se for configuracao e não existir, cria
+        if (entityName === 'Configuracao') {
+          const record = { id, ...clone(patch), updated_at: now() };
+          state[collectionKey].push(record);
+          writeState(state);
+          return clone(record);
+        }
+        throw new Error(`${entityName} não encontrado.`);
+      }
+      let updated = { ...state[collectionKey][index], ...clone(patch), id, updated_date: now() };
+      if (entityName === 'Demanda') updated = normalizeDemanda(updated);
+      if (entityName === 'Usuario') updated = normalizeUsuario(updated);
+
       state[collectionKey][index] = updated;
       writeState(state);
       return clone(updated);
@@ -121,7 +227,7 @@ function createLocalStorageEntityApi(entityName) {
 
     async delete(id) {
       const state = readState();
-      state[collectionKey] = state[collectionKey].filter((item) => item.id !== id);
+      state[collectionKey] = (state[collectionKey] || []).filter((item) => item.id !== id);
       writeState(state);
       return { success: true };
     },
@@ -129,18 +235,21 @@ function createLocalStorageEntityApi(entityName) {
     async bulkUpdate(updates = []) {
       const state = readState();
       const patches = new Map(updates.map((patch) => [patch.id, patch]));
-      state[collectionKey] = state[collectionKey].map((item) => {
+      state[collectionKey] = (state[collectionKey] || []).map((item) => {
         const patch = patches.get(item.id);
-        return patch ? { ...item, ...clone(patch), id: item.id, updated_date: now() } : item;
+        if (!patch) return item;
+        let res = { ...item, ...clone(patch), id: item.id, updated_date: now() };
+        if (entityName === 'Demanda') res = normalizeDemanda(res);
+        return res;
       });
       writeState(state);
-      return clone(state[collectionKey].filter((item) => patches.has(item.id)));
+      return clone((state[collectionKey] || []).filter((item) => patches.has(item.id)));
     },
 
     async updateMany(query = {}, command = {}) {
       const state = readState();
       const patch = command.$set ?? {};
-      state[collectionKey] = state[collectionKey].map((item) => {
+      state[collectionKey] = (state[collectionKey] || []).map((item) => {
         const matches = Object.entries(query).every(([field, value]) => item[field] === value);
         return matches ? { ...item, ...clone(patch), id: item.id, updated_date: now() } : item;
       });
@@ -159,6 +268,15 @@ export const localClient = {
     Status: isSupabaseConfigured
       ? createSupabaseEntityApi('Status')
       : createLocalStorageEntityApi('Status'),
+    Usuario: isSupabaseConfigured
+      ? createSupabaseEntityApi('Usuario')
+      : createLocalStorageEntityApi('Usuario'),
+    AuditLog: isSupabaseConfigured
+      ? createSupabaseEntityApi('AuditLog')
+      : createLocalStorageEntityApi('AuditLog'),
+    Configuracao: isSupabaseConfigured
+      ? createSupabaseEntityApi('Configuracao')
+      : createLocalStorageEntityApi('Configuracao'),
   },
 };
 

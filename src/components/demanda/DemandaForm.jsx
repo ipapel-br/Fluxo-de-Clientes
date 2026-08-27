@@ -3,11 +3,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Plus, History } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Plus, History, Layers } from 'lucide-react';
 import StatusSelect from './StatusSelect';
 import HistoricoPainel from './HistoricoPainel';
 import RegistrarAlteracaoDialog from './RegistrarAlteracaoDialog';
 import { ETIQUETAS, etiquetaConfig } from '@/lib/etiquetas';
+import { FASES_ARTE, faseArteConfig } from '@/lib/progressoArte';
+import { ACABAMENTOS } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
 
 const VAZIO = {
@@ -15,9 +19,12 @@ const VAZIO = {
   demanda: '',
   revenda: '',
   vendedor: '',
+  designer: '',
+  fase_arte: '',
   prazo: '',
   status_id: '',
   etiqueta: '',
+  acabamento: 'Autocolante',
   observacao: '',
 };
 
@@ -27,8 +34,9 @@ export default function DemandaForm({
   onSave,
   demanda,
   statuses,
-  vendedores,
-  revendas,
+  vendedores = [],
+  revendas = [],
+  designers = [],
   onCriarStatus,
   onGerenciarStatus,
   onRegistrarAlteracao,
@@ -46,9 +54,12 @@ export default function DemandaForm({
             demanda: demanda.demanda || '',
             revenda: demanda.revenda || '',
             vendedor: demanda.vendedor || '',
+            designer: demanda.designer || '',
+            fase_arte: demanda.fase_arte || '',
             prazo: demanda.prazo || '',
             status_id: demanda.status_id || '',
             etiqueta: demanda.etiqueta || '',
+            acabamento: demanda.acabamento || 'Autocolante',
             observacao: demanda.observacao || '',
           }
         : VAZIO;
@@ -70,11 +81,17 @@ export default function DemandaForm({
         demanda: (form.demanda || '').trim(),
         revenda: (form.revenda || '').trim(),
         vendedor: (form.vendedor || '').trim(),
+        designer: (form.designer || '').trim(),
+        fase_arte: form.fase_arte || '',
         prazo: form.prazo || '',
         status_id: form.status_id || '',
         etiqueta: form.etiqueta || '',
+        acabamento: form.acabamento || 'Autocolante',
         observacao: (form.observacao || '').trim(),
       });
+    } catch (err) {
+      console.error('[DemandaForm] Erro ao salvar demanda:', err);
+      window.alert(`Não foi possível salvar a demanda: ${err.message || 'Erro desconhecido'}`);
     } finally {
       setSalvando(false);
     }
@@ -97,7 +114,7 @@ export default function DemandaForm({
           <DialogHeader>
             <DialogTitle>{demanda ? 'Editar demanda' : 'Nova demanda'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="space-y-4 py-2 px-1.5 max-h-[72vh] overflow-y-auto">
             <div className="space-y-1.5">
               <Label htmlFor="cliente">
                 Cliente <span className="text-destructive">*</span>
@@ -147,8 +164,41 @@ export default function DemandaForm({
               )}
             </div>
 
+            {/* Acabamento para Fábrica */}
             <div className="space-y-1.5">
-              <Label>Etiqueta</Label>
+              <Label className="flex items-center gap-1.5">
+                <Layers size={13} /> Acabamento (Fábrica)
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {ACABAMENTOS.map((a) => {
+                  const selecionado = form.acabamento === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => set('acabamento', a.id)}
+                      style={
+                        selecionado
+                          ? {
+                              backgroundColor: a.corBg,
+                              color: a.cor,
+                              borderColor: a.corBorder,
+                            }
+                          : undefined
+                      }
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                        selecionado ? 'ring-1 ring-primary/20 shadow-2xs' : 'border-input text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {a.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Urgência / Etiqueta</Label>
               <div className="flex flex-wrap gap-2">
                 {ETIQUETAS.map((e) => {
                   const selecionada = form.etiqueta === e.valor;
@@ -176,6 +226,38 @@ export default function DemandaForm({
                   );
                 })}
                 {!form.etiqueta && <span className="text-xs text-muted-foreground self-center">Nenhuma</span>}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Fase da arte (Designer)</Label>
+              <div className="flex flex-wrap gap-2">
+                {FASES_ARTE.map((f) => {
+                  const selecionada = form.fase_arte === f.valor;
+                  const cfg = faseArteConfig(f.valor);
+                  return (
+                    <button
+                      key={f.valor}
+                      type="button"
+                      onClick={() => set('fase_arte', selecionada ? '' : f.valor)}
+                      style={
+                        selecionada
+                          ? {
+                              backgroundColor: hexToRgba(cfg.cor, 0.16),
+                              color: cfg.cor,
+                              borderColor: hexToRgba(cfg.cor, 0.4),
+                            }
+                          : undefined
+                      }
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition ${
+                        selecionada ? 'font-semibold' : 'border-input text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+                {!form.fase_arte && <span className="text-xs text-muted-foreground self-center">Não iniciada</span>}
               </div>
             </div>
 
@@ -214,35 +296,50 @@ export default function DemandaForm({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="prazo">Prazo</Label>
+                <Label htmlFor="designer">Designer</Label>
                 <Input
-                  id="prazo"
-                  type="date"
-                  value={form.prazo}
-                  onChange={(e) => set('prazo', e.target.value)}
+                  id="designer"
+                  list="designers-list"
+                  value={form.designer}
+                  onChange={(e) => set('designer', e.target.value)}
+                  placeholder="Designer responsável"
                 />
+                <datalist id="designers-list">
+                  {designers.map((d) => (
+                    <option key={d} value={d} />
+                  ))}
+                </datalist>
               </div>
               <div className="space-y-1.5">
-                <Label>Status</Label>
-                <StatusSelect
-                  statuses={statuses}
-                  value={form.status_id}
-                  onChange={(v) => set('status_id', v)}
-                  onCriarNovo={onCriarStatus}
-                  onGerenciar={onGerenciarStatus}
+                <Label htmlFor="prazo">Prazo</Label>
+                <DatePicker
+                  value={form.prazo}
+                  onChange={(v) => set('prazo', v)}
+                  placeholder="Selecione o prazo..."
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
+              <Label>Status</Label>
+              <StatusSelect
+                statuses={statuses}
+                value={form.status_id}
+                onChange={(v) => set('status_id', v)}
+                onCriarNovo={onCriarStatus}
+                onGerenciar={onGerenciarStatus}
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="observacao">Observação</Label>
-              <textarea
+              <Textarea
                 id="observacao"
                 value={form.observacao}
                 onChange={(e) => set('observacao', e.target.value)}
                 placeholder="Informações complementares (opcional)"
                 rows={2}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                className="resize-none"
               />
             </div>
           </div>

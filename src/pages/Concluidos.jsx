@@ -1,14 +1,36 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, RotateCcw, Calendar } from 'lucide-react';
+import { Search, RotateCcw, Calendar, Palette, Layers, UserCheck, History } from 'lucide-react';
 import { localClient } from '@/api/localClient';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import StatusBadge from '@/components/demanda/StatusBadge';
+import EtiquetaBadge from '@/components/demanda/EtiquetaBadge';
+import HistoricoPainel from '@/components/demanda/HistoricoPainel';
+import AcessoNegado from '@/components/auth/AcessoNegado';
 import { formatarPrazoCompleto } from '@/lib/datas';
+import { faseArteConfig } from '@/lib/progressoArte';
+import { acabamentoConfig } from '@/lib/acabamentos';
+import { hexToRgba } from '@/lib/statusColors';
+import { useAuth } from '@/contexts/AuthContext';
+import { entradaReabertura, formatarDataHistorico } from '@/lib/historico';
 
 export default function Concluidos() {
+  const { usuario, can } = useAuth();
   const [demandas, setDemandas] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
+  const [historicoModalDemanda, setHistoricoModalDemanda] = useState(null);
+
+  const canReopen = can('completed_reopen');
+  const canViewHistory = can('history_view');
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -40,7 +62,7 @@ export default function Concluidos() {
           const st = statusMap[d.status_id];
           return st && st.concluido;
         })
-        .sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date)),
+        .sort((a, b) => new Date(b.completed_at || b.updated_date) - new Date(a.completed_at || a.updated_date)),
     [demandas, statusMap]
   );
 
@@ -48,11 +70,12 @@ export default function Concluidos() {
     if (!busca) return concluidas;
     const q = busca.toLowerCase();
     return concluidas.filter((d) =>
-      `${d.cliente} ${d.demanda} ${d.vendedor} ${d.revenda}`.toLowerCase().includes(q)
+      `${d.cliente} ${d.demanda || ''} ${d.vendedor || ''} ${d.revenda || ''} ${d.designer || ''} ${d.acabamento || ''}`.toLowerCase().includes(q)
     );
   }, [concluidas, busca]);
 
   async function reabrir(d) {
+    if (!canReopen) return;
     const naoConcluido = statuses.find((s) => !s.concluido);
     if (!naoConcluido) {
       window.alert('Crie um status não concluído antes de reabrir uma demanda.');
@@ -63,8 +86,23 @@ export default function Concluidos() {
       return !st || !st.concluido;
     });
     const maxOrdem = ativas.reduce((m, x) => Math.max(m, x.ordem ?? 0), -1);
-    await localClient.entities.Demanda.update(d.id, { status_id: naoConcluido.id, ordem: maxOrdem + 1 });
+    const entrada = entradaReabertura(usuario);
+    const historico = [entrada, ...(d.historico || [])];
+
+    await localClient.entities.Demanda.update(d.id, {
+      status_id: naoConcluido.id,
+      ordem: maxOrdem + 1,
+      design_position: maxOrdem + 1,
+      completed_at: null,
+      completed_by: null,
+      historico,
+    });
+
     setDemandas((prev) => prev.filter((x) => x.id !== d.id));
+  }
+
+  if (!can('completed_view')) {
+    return <AcessoNegado mensagem="Você não possui permissão para visualizar as demandas concluídas." />;
   }
 
   return (
@@ -72,17 +110,17 @@ export default function Concluidos() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Concluídos</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Demandas finalizadas. Reabra para voltar à fila de prioridades.
+          Demandas e impressões finalizadas. Reabra para retornar à fila ativa de trabalho.
         </p>
       </div>
 
       <div className="relative mb-4 max-w-xs">
-        <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <input
+        <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar concluídos"
-          className="w-full h-9 rounded-lg border border-input bg-background pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          placeholder="Buscar concluídos..."
+          className="h-9 pl-8"
         />
       </div>
 
@@ -91,47 +129,131 @@ export default function Concluidos() {
           <div className="w-8 h-8 border-4 border-muted border-t-foreground rounded-full animate-spin" />
         </div>
       ) : visiveis.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          {busca ? 'Nenhuma demanda encontrada.' : 'Nenhuma demanda concluída ainda.'}
+        <div className="text-center py-20 text-muted-foreground rounded-2xl border border-dashed border-border bg-card/40 p-8">
+          {busca ? 'Nenhuma demanda encontrada com este termo.' : 'Nenhuma demanda concluída ainda.'}
         </div>
       ) : (
-        <div className="space-y-2">
-          {visiveis.map((d) => (
-            <div key={d.id} className="rounded-xl border border-border bg-card p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="font-semibold leading-tight truncate">{d.cliente}</h3>
-                  {d.demanda && <p className="text-sm text-foreground/80 mt-0.5">{d.demanda}</p>}
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground mt-1.5">
-                    {d.vendedor && <span>{d.vendedor}</span>}
-                    {d.vendedor && d.revenda && <span>·</span>}
-                    {d.revenda && <span>Revenda {d.revenda}</span>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    {d.prazo && (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <Calendar size={11} /> {formatarPrazoCompleto(d.prazo)}
+        <div className="space-y-2.5">
+          {visiveis.map((d) => {
+            const acabamentoCfg = acabamentoConfig(d.acabamento || 'Autocolante');
+            return (
+              <div key={d.id} className="rounded-xl border border-border bg-card p-3.5 shadow-2xs hover:border-foreground/20 transition">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-base leading-tight truncate text-foreground">{d.cliente}</h3>
+                    {d.demanda && <p className="text-sm text-foreground/80 mt-0.5">{d.demanda}</p>}
+
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground mt-1.5">
+                      {d.designer && <span>Designer: <strong className="font-semibold text-foreground/90">{d.designer}</strong></span>}
+                      {d.designer && (d.vendedor || d.revenda) && <span>·</span>}
+                      {d.vendedor && <span>Vendedor: <strong className="font-semibold text-foreground/90">{d.vendedor}</strong></span>}
+                      {d.vendedor && d.revenda && <span>·</span>}
+                      {d.revenda && <span>Revenda {d.revenda}</span>}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      {/* Acabamento */}
+                      <span
+                        style={{
+                          backgroundColor: acabamentoCfg.corBg,
+                          color: acabamentoCfg.cor,
+                          borderColor: acabamentoCfg.corBorder,
+                        }}
+                        className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider"
+                      >
+                        <Layers size={11} />
+                        {acabamentoCfg.label}
                       </span>
+
+                      {d.etiqueta && <EtiquetaBadge etiqueta={d.etiqueta} />}
+
+                      {faseArteConfig(d.fase_arte) && (
+                        <span
+                          style={{
+                            backgroundColor: hexToRgba(faseArteConfig(d.fase_arte).cor, 0.14),
+                            color: faseArteConfig(d.fase_arte).cor,
+                            borderColor: hexToRgba(faseArteConfig(d.fase_arte).cor, 0.35),
+                          }}
+                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                        >
+                          <Palette size={10} />
+                          {faseArteConfig(d.fase_arte).label}
+                        </span>
+                      )}
+
+                      {d.prazo && (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Calendar size={11} /> {formatarPrazoCompleto(d.prazo)}
+                        </span>
+                      )}
+
+                      <StatusBadge status={statusMap[d.status_id]} />
+                    </div>
+
+                    {/* Data de conclusão e responsável */}
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/40 flex-wrap">
+                      {d.completed_at && (
+                        <span>Concluído em: <strong>{formatarDataHistorico(d.completed_at)}</strong></span>
+                      )}
+                      {d.completed_by && (
+                        <>
+                          <span>·</span>
+                          <span className="inline-flex items-center gap-1">
+                            <UserCheck size={12} /> Por: <strong>{d.completed_by}</strong>
+                          </span>
+                        </>
+                      )}
+                      {canViewHistory && (
+                        <button
+                          type="button"
+                          onClick={() => setHistoricoModalDemanda(d)}
+                          className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-medium transition cursor-pointer"
+                        >
+                          <History size={12} /> Histórico ({d.historico?.length || 0})
+                        </button>
+                      )}
+                    </div>
+
+                    {d.observacao && (
+                      <p className="text-xs text-muted-foreground mt-1.5 italic line-clamp-2">
+                        {d.observacao}
+                      </p>
                     )}
-                    <StatusBadge status={statusMap[d.status_id]} />
                   </div>
-                  {d.observacao && (
-                    <p className="text-xs text-muted-foreground mt-1.5 italic line-clamp-2">
-                      {d.observacao}
-                    </p>
+
+                  {canReopen && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => reabrir(d)}
+                      className="shrink-0 h-8 px-2.5 text-xs font-semibold shadow-xs"
+                    >
+                      <RotateCcw size={13} className="mr-1" /> Reabrir
+                    </Button>
                   )}
                 </div>
-                <button
-                  onClick={() => reabrir(d)}
-                  className="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-input text-sm hover:bg-muted transition"
-                >
-                  <RotateCcw size={14} /> Reabrir
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+
+      {/* Modal de Histórico */}
+      <Dialog open={Boolean(historicoModalDemanda)} onOpenChange={(open) => !open && setHistoricoModalDemanda(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <History size={18} /> Histórico de Alterações
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Histórico da demanda concluída de <strong className="text-foreground">{historicoModalDemanda?.cliente}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <HistoricoPainel historico={historicoModalDemanda?.historico} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

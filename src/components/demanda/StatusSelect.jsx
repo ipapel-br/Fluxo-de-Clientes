@@ -23,7 +23,7 @@ export default function StatusSelect({ statuses, value, onChange, onCriarNovo, o
 
   return (
     <Select value={value || undefined} onValueChange={handle}>
-      <SelectTrigger className="w-full h-9">
+      <SelectTrigger className="w-full h-10">
         {atual ? (
           <StatusBadge status={atual} />
         ) : (

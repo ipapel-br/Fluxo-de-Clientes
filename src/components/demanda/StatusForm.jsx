@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { PRESET_COLORS } from '@/lib/statusColors';
 
 export default function StatusForm({ open, onClose, onSave }) {
@@ -58,15 +59,16 @@ export default function StatusForm({ open, onClose, onSave }) {
               ))}
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="st-concluido"
               checked={concluido}
-              onChange={(e) => setConcluido(e.target.checked)}
-              className="h-4 w-4 rounded border-input"
+              onCheckedChange={(v) => setConcluido(Boolean(v))}
             />
-            <span>Considerar como concluído (sai da fila ativa)</span>
-          </label>
+            <Label htmlFor="st-concluido" className="text-sm font-normal cursor-pointer">
+              Considerar como concluído (sai da fila ativa)
+            </Label>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function RegistrarAlteracaoDialog({ open, onClose, onConfirm }) {
   const [texto, setTexto] = useState('');
@@ -20,7 +21,7 @@ export default function RegistrarAlteracaoDialog({ open, onClose, onConfirm }) {
         <DialogHeader>
           <DialogTitle>Nova situação / alteração</DialogTitle>
         </DialogHeader>
-        <textarea
+        <Textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           placeholder="Descreva a nova orientação..."
@@ -29,7 +30,7 @@ export default function RegistrarAlteracaoDialog({ open, onClose, onConfirm }) {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) confirmar();
           }}
-          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+          className="resize-none"
         />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
