@@ -78,21 +78,33 @@ export default function Filtros({
         <FilterSelect
           value={filtros.designer}
           onChange={(v) => setFiltros({ ...filtros, designer: v })}
-          options={designers.map((d) => ({ value: d, label: d }))}
+          options={designers.map((d) =>
+            typeof d === 'object'
+              ? { value: d.value || d.nome || '', label: d.label || d.nome || '', avatar_url: d.avatar_url }
+              : { value: d, label: d }
+          )}
           placeholder="Designer"
           showAvatar={true}
         />
         <FilterSelect
           value={filtros.vendedor}
           onChange={(v) => setFiltros({ ...filtros, vendedor: v })}
-          options={vendedores.map((v) => ({ value: v, label: v }))}
+          options={vendedores.map((v) =>
+            typeof v === 'object'
+              ? { value: v.value || v.nome || '', label: v.label || v.nome || '', avatar_url: v.avatar_url }
+              : { value: v, label: v }
+          )}
           placeholder="Vendedor"
           showAvatar={true}
         />
         <FilterSelect
           value={filtros.revenda}
           onChange={(v) => setFiltros({ ...filtros, revenda: v })}
-          options={revendas.map((r) => ({ value: r, label: r }))}
+          options={revendas.map((r) =>
+            typeof r === 'object'
+              ? { value: r.value || r.nome || '', label: r.label || r.nome || '', avatar_url: r.avatar_url }
+              : { value: r, label: r }
+          )}
           placeholder="Revenda"
           showAvatar={true}
         />

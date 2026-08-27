@@ -34,12 +34,14 @@ export default function UserAvatar({
   const color = getAvatarColor(name);
   const initials = getInitials(name);
 
+  const displayName = typeof name === 'object' ? (name.nome || name.label || name.name || '') : String(name || '');
+
   if (avatarUrl) {
     return (
       <img
         src={avatarUrl}
-        alt={name || 'Avatar'}
-        title={showTooltip ? name : undefined}
+        alt={displayName || 'Avatar'}
+        title={showTooltip ? displayName : undefined}
         className={`inline-block rounded-full object-cover shrink-0 border border-border/70 shadow-2xs ${sizeClasses} ${className}`}
       />
     );
@@ -47,7 +49,7 @@ export default function UserAvatar({
 
   return (
     <span
-      title={showTooltip ? name : undefined}
+      title={showTooltip ? displayName : undefined}
       style={{
         backgroundColor: color.bg,
         color: color.text,

@@ -147,7 +147,11 @@ export default function FabricaFiltros({
         <FilterSelect
           value={filtros.vendedor}
           onChange={(v) => setFiltros({ ...filtros, vendedor: v })}
-          options={vendedores.map((v) => ({ value: v, label: v }))}
+          options={vendedores.map((v) =>
+            typeof v === 'object'
+              ? { value: v.value || v.nome || '', label: v.label || v.nome || '', avatar_url: v.avatar_url }
+              : { value: v, label: v }
+          )}
           placeholder="Vendedor"
           showAvatar={true}
         />

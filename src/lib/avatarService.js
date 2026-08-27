@@ -155,9 +155,11 @@ const AVATAR_COLORS = [
 
 export function getAvatarColor(name) {
   if (!name) return AVATAR_COLORS[7];
+  const str = typeof name === 'object' ? (name.nome || name.label || name.name || '') : String(name);
+  if (!str) return AVATAR_COLORS[7];
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
   const index = Math.abs(hash) % AVATAR_COLORS.length;
   return AVATAR_COLORS[index];
@@ -165,7 +167,10 @@ export function getAvatarColor(name) {
 
 export function getInitials(name) {
   if (!name) return '?';
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const str = typeof name === 'object' ? (name.nome || name.label || name.name || '') : String(name);
+  const trimmed = str.trim();
+  if (!trimmed) return '?';
+  const parts = trimmed.split(/\s+/).filter(Boolean);
   if (parts.length === 1) {
     return parts[0].slice(0, 2).toUpperCase();
   }
