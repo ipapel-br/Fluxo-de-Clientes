@@ -7,6 +7,7 @@ import {
   getEffectivePermissions,
   getInitialRouteForUser,
 } from '@/lib/permissoes';
+import { syncAvatarsFromUsers, saveAvatar } from '@/lib/avatarService';
 
 const AUTH_STORAGE_KEY = 'fluxo-clientes:current-user';
 
@@ -65,7 +66,9 @@ export function AuthProvider({ children }) {
         localClient.entities.Usuario.list('nome', 500),
         localClient.entities.Configuracao.list('id', 1),
       ]);
-      setUsuariosLista(users || []);
+      const lista = users || [];
+      setUsuariosLista(lista);
+      syncAvatarsFromUsers(lista);
       if (configs && configs.length > 0) {
         setConfiguracao(configs[0]);
       }
@@ -443,11 +446,33 @@ export function AuthProvider({ children }) {
       const updated = { ...usuario, avatar_url: avatarUrl };
       setUsuario(updated);
       safeStorageSet(AUTH_STORAGE_KEY, JSON.stringify(updated));
+      if (usuario.nome) saveAvatar(usuario.nome, avatarUrl);
+      if (usuario.email) saveAvatar(usuario.email, avatarUrl);
+      if (usuario.id) saveAvatar(usuario.id, avatarUrl);
       await carregarUsuariosEConfig();
     } catch (err) {
       console.error('[AuthContext] Erro ao atualizar avatar:', err);
     }
   }
+
+  // Listas de usuários ativos categorizados por papel
+  const vendedoresCadastrados = useMemo(() => {
+    return usuariosLista
+      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.SELLER || u.role === PERFIS.ADMIN))
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
+  }, [usuariosLista]);
+
+  const designersCadastrados = useMemo(() => {
+    return usuariosLista
+      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.DESIGNER || u.role === PERFIS.ADMIN))
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
+  }, [usuariosLista]);
+
+  const impressoresCadastrados = useMemo(() => {
+    return usuariosLista
+      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.PRINTER || u.role === PERFIS.ADMIN))
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
+  }, [usuariosLista]);
 
   function logout() {
     if (isSupabaseConfigured && supabase) {
@@ -463,6 +488,9 @@ export function AuthProvider({ children }) {
       value={{
         usuario,
         usuarios: usuariosLista,
+        vendedores: vendedoresCadastrados,
+        designers: designersCadastrados,
+        impressores: impressoresCadastrados,
         configuracao,
         permissoes,
         can,

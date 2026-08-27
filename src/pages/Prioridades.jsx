@@ -21,7 +21,13 @@ import {
 } from '@/lib/historico';
 
 export default function Prioridades() {
-  const { usuario, can, configuracao } = useAuth();
+  const {
+    usuario,
+    can,
+    configuracao,
+    designers: designersCadastrados,
+    vendedores: vendedoresCadastrados,
+  } = useAuth();
   const [demandas, setDemandas] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,14 +114,38 @@ export default function Prioridades() {
     });
   }, [ativas, filtros, filtrando]);
 
-  const designers = useMemo(
-    () => [...new Set(demandas.map((d) => d.designer).filter(Boolean))].sort(),
-    [demandas]
-  );
-  const vendedores = useMemo(
-    () => [...new Set(demandas.map((d) => d.vendedor).filter(Boolean))].sort(),
-    [demandas]
-  );
+  const designers = useMemo(() => {
+    if (designersCadastrados && designersCadastrados.length > 0) {
+      return designersCadastrados.map((d) => ({
+        id: d.id,
+        value: d.nome,
+        label: d.nome,
+        avatar_url: d.avatar_url,
+      }));
+    }
+    return [...new Set(demandas.map((d) => d.designer).filter(Boolean))].sort().map((nome) => ({
+      id: nome,
+      value: nome,
+      label: nome,
+    }));
+  }, [designersCadastrados, demandas]);
+
+  const vendedores = useMemo(() => {
+    if (vendedoresCadastrados && vendedoresCadastrados.length > 0) {
+      return vendedoresCadastrados.map((v) => ({
+        id: v.id,
+        value: v.nome,
+        label: v.nome,
+        avatar_url: v.avatar_url,
+      }));
+    }
+    return [...new Set(demandas.map((d) => d.vendedor).filter(Boolean))].sort().map((nome) => ({
+      id: nome,
+      value: nome,
+      label: nome,
+    }));
+  }, [vendedoresCadastrados, demandas]);
+
   const revendas = useMemo(
     () => [...new Set(demandas.map((d) => d.revenda).filter(Boolean))].sort(),
     [demandas]

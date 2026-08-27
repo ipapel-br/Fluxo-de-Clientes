@@ -5,6 +5,14 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { Plus, History, Layers } from 'lucide-react';
 import StatusSelect from './StatusSelect';
 import HistoricoPainel from './HistoricoPainel';
@@ -279,36 +287,60 @@ export default function DemandaForm({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="vendedor">Vendedor</Label>
-                <Input
-                  id="vendedor"
-                  list="vendedores-list"
-                  value={form.vendedor}
-                  onChange={(e) => set('vendedor', e.target.value)}
-                  placeholder="Vendedor responsável"
-                />
-                <datalist id="vendedores-list">
-                  {vendedores.map((v) => (
-                    <option key={v} value={v} />
-                  ))}
-                </datalist>
+                <Select
+                  value={form.vendedor || '__none__'}
+                  onValueChange={(v) => set('vendedor', v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger id="vendedor" className="h-10 text-sm">
+                    <SelectValue placeholder="Selecione o vendedor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nenhum / Não atribuído</SelectItem>
+                    {vendedores.map((v) => {
+                      const val = typeof v === 'object' ? v.value || v.nome : v;
+                      const lbl = typeof v === 'object' ? v.label || v.nome : v;
+                      const avatar = typeof v === 'object' ? v.avatar_url : undefined;
+                      return (
+                        <SelectItem key={val} value={val}>
+                          <div className="flex items-center gap-2">
+                            <UserAvatar name={lbl} src={avatar} size="xs" />
+                            <span>{lbl}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="designer">Designer</Label>
-                <Input
-                  id="designer"
-                  list="designers-list"
-                  value={form.designer}
-                  onChange={(e) => set('designer', e.target.value)}
-                  placeholder="Designer responsável"
-                />
-                <datalist id="designers-list">
-                  {designers.map((d) => (
-                    <option key={d} value={d} />
-                  ))}
-                </datalist>
+                <Select
+                  value={form.designer || '__none__'}
+                  onValueChange={(v) => set('designer', v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger id="designer" className="h-10 text-sm">
+                    <SelectValue placeholder="Selecione o designer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nenhum / Não atribuído</SelectItem>
+                    {designers.map((d) => {
+                      const val = typeof d === 'object' ? d.value || d.nome : d;
+                      const lbl = typeof d === 'object' ? d.label || d.nome : d;
+                      const avatar = typeof d === 'object' ? d.avatar_url : undefined;
+                      return (
+                        <SelectItem key={val} value={val}>
+                          <div className="flex items-center gap-2">
+                            <UserAvatar name={lbl} src={avatar} size="xs" />
+                            <span>{lbl}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="prazo">Prazo</Label>

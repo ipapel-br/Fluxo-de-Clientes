@@ -1,6 +1,7 @@
 // Serviço de gerenciamento de avatares com persistência e broadcast de atualizações
 const STORAGE_KEY = 'fluxo-clientes:avatars';
 const LISTENERS = new Set();
+let USERS_CACHE = [];
 
 function safeGetStorage() {
   try {
@@ -24,11 +25,63 @@ function safeSetStorage(data) {
   }
 }
 
+export function notifyAvatarUpdate() {
+  LISTENERS.forEach((callback) => {
+    try {
+      callback();
+    } catch {}
+  });
+}
+
+export function syncAvatarsFromUsers(users = []) {
+  if (!Array.isArray(users)) return;
+  USERS_CACHE = users;
+  const map = safeGetStorage();
+  users.forEach((u) => {
+    if (u && u.avatar_url) {
+      if (u.nome) {
+        map[String(u.nome).trim().toLowerCase()] = u.avatar_url;
+        const primeiroNome = String(u.nome).trim().split(/\s+/)[0].toLowerCase();
+        if (primeiroNome) map[primeiroNome] = u.avatar_url;
+      }
+      if (u.email) map[String(u.email).trim().toLowerCase()] = u.avatar_url;
+      if (u.id) map[String(u.id).trim().toLowerCase()] = u.avatar_url;
+    }
+  });
+  safeSetStorage(map);
+  notifyAvatarUpdate();
+}
+
 export function getAvatar(name) {
   if (!name) return null;
   const key = String(name).trim().toLowerCase();
+
+  // 1. Busca direta no cache de usuários cadastrados
+  const foundUser = USERS_CACHE.find(
+    (u) =>
+      (u.nome && u.nome.trim().toLowerCase() === key) ||
+      (u.email && u.email.trim().toLowerCase() === key) ||
+      (u.id && u.id.trim().toLowerCase() === key)
+  );
+  if (foundUser?.avatar_url) return foundUser.avatar_url;
+
+  // 2. Busca no storage local de avatares
   const map = safeGetStorage();
-  return map[key] || null;
+  if (map[key]) return map[key];
+
+  // 3. Busca por primeiro nome (ex: card tem "Alan", usuário é "Alan Oliveira")
+  const primeiroNome = key.split(/\s+/)[0];
+  if (map[primeiroNome]) return map[primeiroNome];
+
+  const partialUser = USERS_CACHE.find(
+    (u) =>
+      u.avatar_url &&
+      u.nome &&
+      (u.nome.toLowerCase().startsWith(primeiroNome) || primeiroNome.startsWith(u.nome.toLowerCase().split(/\s+/)[0]))
+  );
+  if (partialUser?.avatar_url) return partialUser.avatar_url;
+
+  return null;
 }
 
 export function saveAvatar(name, dataUrl) {
@@ -37,18 +90,13 @@ export function saveAvatar(name, dataUrl) {
   const map = safeGetStorage();
   if (dataUrl) {
     map[key] = dataUrl;
+    const primeiroNome = key.split(/\s+/)[0];
+    if (primeiroNome) map[primeiroNome] = dataUrl;
   } else {
     delete map[key];
   }
   safeSetStorage(map);
-  // Notifica todos os componentes inscritos
-  LISTENERS.forEach((callback) => {
-    try {
-      callback();
-    } catch {
-      // Ignora erro de callback
-    }
-  });
+  notifyAvatarUpdate();
 }
 
 export function subscribeAvatars(callback) {

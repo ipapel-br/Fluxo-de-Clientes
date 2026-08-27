@@ -20,6 +20,13 @@ import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -218,69 +225,63 @@ export default function DemandaItem({
         <div className="font-semibold text-xs text-foreground pb-0.5 border-b">Responsáveis pela Demanda</div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor={`des-${demanda.id}`} className="text-xs flex items-center gap-1.5">
-              <UserAvatar name={respTemp.designer} size="xs" /> Designer
-            </Label>
-            {respTemp.designer && (
-              <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition" title="Enviar foto do Designer">
-                <Camera size={12} /> Foto
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleUploadAvatarFor(respTemp.designer, f);
-                  }}
-                />
-              </label>
-            )}
-          </div>
-          <Input
-            id={`des-${demanda.id}`}
-            list={`des-list-${demanda.id}`}
-            value={respTemp.designer}
-            onChange={(e) => setRespTemp(prev => ({ ...prev, designer: e.target.value }))}
-            placeholder="Nome do designer"
-            className="h-8 text-xs"
-          />
-          <datalist id={`des-list-${demanda.id}`}>
-            {designers.map(d => <option key={d} value={d} />)}
-          </datalist>
+          <Label htmlFor={`des-${demanda.id}`} className="text-xs flex items-center gap-1.5">
+            <UserAvatar name={respTemp.designer} size="xs" /> Designer
+          </Label>
+          <Select
+            value={respTemp.designer || '__none__'}
+            onValueChange={(v) => setRespTemp((prev) => ({ ...prev, designer: v === '__none__' ? '' : v }))}
+          >
+            <SelectTrigger id={`des-${demanda.id}`} className="h-8 text-xs">
+              <SelectValue placeholder="Selecione o designer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Nenhum / Não atribuído</SelectItem>
+              {designers.map((d) => {
+                const val = typeof d === 'object' ? d.value || d.nome : d;
+                const lbl = typeof d === 'object' ? d.label || d.nome : d;
+                const avatar = typeof d === 'object' ? d.avatar_url : undefined;
+                return (
+                  <SelectItem key={val} value={val}>
+                    <div className="flex items-center gap-2">
+                      <UserAvatar name={lbl} src={avatar} size="xs" />
+                      <span>{lbl}</span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor={`ven-${demanda.id}`} className="text-xs flex items-center gap-1.5">
-              <UserAvatar name={respTemp.vendedor} size="xs" /> Vendedor
-            </Label>
-            {respTemp.vendedor && (
-              <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition" title="Enviar foto do Vendedor">
-                <Camera size={12} /> Foto
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleUploadAvatarFor(respTemp.vendedor, f);
-                  }}
-                />
-              </label>
-            )}
-          </div>
-          <Input
-            id={`ven-${demanda.id}`}
-            list={`ven-list-${demanda.id}`}
-            value={respTemp.vendedor}
-            onChange={(e) => setRespTemp(prev => ({ ...prev, vendedor: e.target.value }))}
-            placeholder="Nome do vendedor"
-            className="h-8 text-xs"
-          />
-          <datalist id={`ven-list-${demanda.id}`}>
-            {vendedores.map(v => <option key={v} value={v} />)}
-          </datalist>
+          <Label htmlFor={`ven-${demanda.id}`} className="text-xs flex items-center gap-1.5">
+            <UserAvatar name={respTemp.vendedor} size="xs" /> Vendedor
+          </Label>
+          <Select
+            value={respTemp.vendedor || '__none__'}
+            onValueChange={(v) => setRespTemp((prev) => ({ ...prev, vendedor: v === '__none__' ? '' : v }))}
+          >
+            <SelectTrigger id={`ven-${demanda.id}`} className="h-8 text-xs">
+              <SelectValue placeholder="Selecione o vendedor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Nenhum / Não atribuído</SelectItem>
+              {vendedores.map((v) => {
+                const val = typeof v === 'object' ? v.value || v.nome : v;
+                const lbl = typeof v === 'object' ? v.label || v.nome : v;
+                const avatar = typeof v === 'object' ? v.avatar_url : undefined;
+                return (
+                  <SelectItem key={val} value={val}>
+                    <div className="flex items-center gap-2">
+                      <UserAvatar name={lbl} src={avatar} size="xs" />
+                      <span>{lbl}</span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-1.5">

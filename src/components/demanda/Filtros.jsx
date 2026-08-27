@@ -26,7 +26,7 @@ function FilterSelect({ value, onChange, options, placeholder, showAvatar = fals
           <SelectItem key={o.value} value={o.value}>
             <div className="flex items-center gap-2">
               {showAvatar && o.value && (
-                <UserAvatar name={o.label} size="xs" className="shrink-0" />
+                <UserAvatar name={o.label} src={o.avatar_url} size="xs" className="shrink-0" />
               )}
               <span>{o.label}</span>
             </div>

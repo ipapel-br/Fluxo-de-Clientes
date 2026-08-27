@@ -15,7 +15,7 @@ import {
 } from '@/lib/historico';
 
 export default function Fabrica() {
-  const { usuario, can } = useAuth();
+  const { usuario, can, vendedores: vendedoresCadastrados } = useAuth();
   const [demandas, setDemandas] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,10 +113,21 @@ export default function Fabrica() {
     });
   }, [ativasFabrica, filtros, filtrando]);
 
-  const vendedores = useMemo(
-    () => [...new Set(demandas.map((d) => d.vendedor).filter(Boolean))].sort(),
-    [demandas]
-  );
+  const vendedores = useMemo(() => {
+    if (vendedoresCadastrados && vendedoresCadastrados.length > 0) {
+      return vendedoresCadastrados.map((v) => ({
+        id: v.id,
+        value: v.nome,
+        label: v.nome,
+        avatar_url: v.avatar_url,
+      }));
+    }
+    return [...new Set(demandas.map((d) => d.vendedor).filter(Boolean))].sort().map((nome) => ({
+      id: nome,
+      value: nome,
+      label: nome,
+    }));
+  }, [vendedoresCadastrados, demandas]);
 
   // Drag & drop da Fábrica (salva na fila factory_position, sem afetar design_position)
   async function onDragEnd(result) {
