@@ -33,9 +33,9 @@ import { hexToRgba } from '@/lib/statusColors';
 import { useAuth } from '@/contexts/AuthContext';
 
 const PRAZO_CLASSES = {
-  vencido: 'text-red-700 bg-red-50/90 border-red-200 hover:bg-red-100',
-  hoje: 'text-amber-700 bg-amber-50/90 border-amber-200 font-semibold hover:bg-amber-100',
-  amanha: 'text-sky-700 bg-sky-50/90 border-sky-200 hover:bg-sky-100',
+  vencido: 'text-red-700 bg-red-50/90 border-red-200 hover:bg-red-100 dark:text-red-400 dark:bg-red-950/40 dark:border-red-900/60 dark:hover:bg-red-900/50',
+  hoje: 'text-amber-700 bg-amber-50/90 border-amber-200 font-semibold hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-950/40 dark:border-amber-900/60 dark:hover:bg-amber-900/50',
+  amanha: 'text-sky-700 bg-sky-50/90 border-sky-200 hover:bg-sky-100 dark:text-sky-400 dark:bg-sky-950/40 dark:border-sky-900/60 dark:hover:bg-sky-900/50',
   null: 'text-muted-foreground bg-muted/40 border-border hover:bg-muted',
 };
 
@@ -229,7 +229,15 @@ export default function FabricaItem({
                   key={st.id}
                   type="button"
                   onClick={() => {
-                    onQuickUpdate?.(demanda, { factory_status: st.id });
+                    if (st.id === 'impresso') {
+                      onConcluirImpressao?.(demanda);
+                    } else if (st.id === 'em_impressao') {
+                      onIniciarImpressao?.(demanda);
+                    } else if (st.id === 'pausado') {
+                      onPausarImpressao?.(demanda);
+                    } else {
+                      onQuickUpdate?.(demanda, { factory_status: st.id });
+                    }
                     setStatusFabricaPopoverOpen(false);
                   }}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition ${

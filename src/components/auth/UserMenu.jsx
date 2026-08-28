@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
-import { User, LogOut, ShieldCheck, Palette, Printer, ShoppingBag, Camera } from 'lucide-react';
+import { User, LogOut, ShieldCheck, Palette, Printer, ShoppingBag, Camera, Sun, Moon, Monitor } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { PERFIS, PERFIS_LABELS } from '@/lib/permissoes';
 
 const ROLE_ICONS = {
@@ -14,6 +15,7 @@ const ROLE_ICONS = {
 
 export default function UserMenu() {
   const { usuario, logout, setLoginModalOpen, atualizarAvatar } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -90,7 +92,7 @@ export default function UserMenu() {
           </div>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-3 space-y-3" align="end">
+      <PopoverContent className="w-68 p-3 space-y-3" align="end">
         <div className="flex items-center gap-2.5 pb-2.5 border-b border-border">
           {/* Avatar com opção de troca de foto */}
           <button
@@ -130,7 +132,47 @@ export default function UserMenu() {
           </div>
         </div>
 
-        <div className="space-y-1">
+        {/* Tema visual */}
+        <div className="space-y-1.5 pt-0.5">
+          <label className="text-[11px] font-medium text-muted-foreground">Aparência</label>
+          <div className="grid grid-cols-3 gap-1 p-1 bg-muted/60 rounded-lg border border-border">
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`flex items-center justify-center gap-1 py-1 px-1.5 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                theme === 'light'
+                  ? 'bg-background text-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Sun size={12} className={theme === 'light' ? 'text-amber-500' : ''} /> Claro
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`flex items-center justify-center gap-1 py-1 px-1.5 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                theme === 'dark'
+                  ? 'bg-background text-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Moon size={12} className={theme === 'dark' ? 'text-sky-400' : ''} /> Escuro
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('system')}
+              className={`flex items-center justify-center gap-1 py-1 px-1.5 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                theme === 'system'
+                  ? 'bg-background text-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Monitor size={12} /> Auto
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-1 pt-1 border-t border-border">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}

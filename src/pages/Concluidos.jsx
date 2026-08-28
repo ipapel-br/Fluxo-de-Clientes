@@ -19,7 +19,7 @@ import { faseArteConfig } from '@/lib/progressoArte';
 import { acabamentoConfig } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
 import { useAuth } from '@/contexts/AuthContext';
-import { entradaReabertura, formatarDataHistorico } from '@/lib/historico';
+import { formatarDataHistorico } from '@/lib/historico';
 import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
 
 export default function Concluidos() {
@@ -82,30 +82,55 @@ export default function Concluidos() {
       window.alert('Crie um status não concluído antes de reabrir uma demanda.');
       return;
     }
+
+    // Identificar de onde a demanda veio antes de ser concluída:
+    // Analisamos o último evento de conclusão no histórico
+    const ultimoEventoConclusao = (d.historico || []).find(
+      (h) => h.tipo === 'conclusao_impressao' || h.tipo === 'conclusao'
+    );
+
+    let veioDeImpressao = false;
+    if (ultimoEventoConclusao) {
+      veioDeImpressao = ultimoEventoConclusao.tipo === 'conclusao_impressao';
+    } else {
+      veioDeImpressao = d.factory_status === 'impresso';
+    }
+
     const ativas = demandas.filter((d2) => {
       const st = statusMap[d2.status_id];
       return !st || !st.concluido;
     });
     const maxOrdem = ativas.reduce((m, x) => Math.max(m, x.ordem ?? 0), -1);
-    const entrada = entradaReabertura(usuario);
+
+    const entrada = {
+      texto: veioDeImpressao ? 'Demanda reaberta para a Fila de Impressão' : 'Demanda reaberta para a Fila de Prioridades',
+      data: new Date().toISOString(),
+      tipo: 'reabertura',
+      usuario: usuario ? { nome: usuario.nome, email: usuario.email } : null,
+    };
     const historico = [entrada, ...(d.historico || [])];
 
-    await localClient.entities.Demanda.update(d.id, {
+    const patch = {
       status_id: naoConcluido.id,
       ordem: maxOrdem + 1,
       design_position: maxOrdem + 1,
       completed_at: null,
       completed_by: null,
+      factory_status: veioDeImpressao ? 'aguardando' : 'pendente_design',
       historico,
-    });
+    };
+
+    await localClient.entities.Demanda.update(d.id, patch);
 
     emitirNotificacao({
-      demanda: { ...d, status_id: naoConcluido.id },
+      demanda: { ...d, ...patch },
       autor: usuario,
       tipo: NOTIFICATION_TYPES.REABERTURA,
       titulo: 'Demanda reaberta',
-      mensagem: `${usuario?.nome || 'Alguém'} reabriu a demanda de "${d.cliente}" para a fila de prioridades.`,
-      link_path: '/',
+      mensagem: `${usuario?.nome || 'Alguém'} reabriu a demanda de "${d.cliente}" para ${
+        veioDeImpressao ? 'a fila de impressão' : 'a fila de prioridades'
+      }.`,
+      link_path: veioDeImpressao ? '/impressao' : '/',
     });
 
     setDemandas((prev) => prev.filter((x) => x.id !== d.id));

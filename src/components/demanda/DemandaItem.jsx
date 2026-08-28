@@ -10,8 +10,6 @@ import {
   Palette,
   X,
   History,
-  Camera,
-  Layers,
   Printer,
 } from 'lucide-react';
 import { ptBR } from 'date-fns/locale';
@@ -41,14 +39,14 @@ import { processAvatarFile, saveAvatar } from '@/lib/avatarService';
 import { labelPrazo, tipoAlertaPrazo } from '@/lib/datas';
 import { ETIQUETAS, etiquetaConfig } from '@/lib/etiquetas';
 import { FASES_ARTE, faseArteConfig } from '@/lib/progressoArte';
-import { ACABAMENTOS, acabamentoConfig } from '@/lib/acabamentos';
+import { acabamentoConfig } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
 import { useAuth } from '@/contexts/AuthContext';
 
 const PRAZO_CLASSES = {
-  vencido: 'text-red-700 bg-red-50/90 border-red-200 hover:bg-red-100',
-  hoje: 'text-amber-700 bg-amber-50/90 border-amber-200 font-semibold hover:bg-amber-100',
-  amanha: 'text-sky-700 bg-sky-50/90 border-sky-200 hover:bg-sky-100',
+  vencido: 'text-red-700 bg-red-50/90 border-red-200 hover:bg-red-100 dark:text-red-400 dark:bg-red-950/40 dark:border-red-900/60 dark:hover:bg-red-900/50',
+  hoje: 'text-amber-700 bg-amber-50/90 border-amber-200 font-semibold hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-950/40 dark:border-amber-900/60 dark:hover:bg-amber-900/50',
+  amanha: 'text-sky-700 bg-sky-50/90 border-sky-200 hover:bg-sky-100 dark:text-sky-400 dark:bg-sky-950/40 dark:border-sky-900/60 dark:hover:bg-sky-900/50',
   null: 'text-muted-foreground bg-muted/40 border-border hover:bg-muted',
 };
 
@@ -197,7 +195,7 @@ export default function DemandaItem({
     }}>
       <PopoverTrigger asChild>
         <div
-          className="inline-flex items-center gap-2 cursor-pointer py-0.5 px-1.5 rounded-md hover:bg-muted transition text-xs text-muted-foreground flex-wrap"
+          className="inline-flex items-center gap-2 cursor-pointer py-0.5 px-1 -ml-1 rounded-md hover:bg-muted transition text-xs text-muted-foreground flex-wrap"
           title="Clique para editar responsáveis (Designer, Vendedor, Revenda)"
         >
           <span className="inline-flex items-center gap-1.5">
@@ -323,7 +321,7 @@ export default function DemandaItem({
       </PopoverContent>
     </Popover>
   ) : (
-    <div className="inline-flex items-center gap-2 py-0.5 px-1 text-xs text-muted-foreground flex-wrap">
+    <div className="inline-flex items-center gap-2 py-0.5 px-0 text-xs text-muted-foreground flex-wrap">
       <span className="inline-flex items-center gap-1.5">
         <span>Designer:</span>
         <UserAvatar name={demanda.designer} size="xs" />
@@ -844,19 +842,23 @@ export default function DemandaItem({
 
                 {/* Centro e Direita: Conteúdo do Card */}
                 <div className="flex-1 min-w-0 space-y-2">
-                  {/* Linha 1: Cliente | Responsáveis | Ações */}
+                  {/* Linha 1: Cliente | Ações */}
                   <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-3">
                     <div className="flex items-center gap-2 min-w-0">
                       {clienteNode}
                     </div>
 
-                    <div className="flex items-center gap-x-2 text-xs text-muted-foreground ml-auto pr-2">
-                      {responsaveisNode}
+                    <div className="flex items-center gap-x-2 text-xs text-muted-foreground ml-auto">
                       {acoesNode}
                     </div>
                   </div>
 
-                  {/* Linha 2: Etapa */}
+                  {/* Linha 2: Responsáveis (Designer, Vendedor, Revenda) */}
+                  <div className="min-w-0 -mt-1">
+                    {responsaveisNode}
+                  </div>
+
+                  {/* Linha 3: Etapa */}
                   {etapaNode}
 
                   {/* Linha 3: Badges */}

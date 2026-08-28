@@ -13,7 +13,7 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import UserAvatar from '@/components/ui/UserAvatar';
-import { Plus, History, Layers } from 'lucide-react';
+import { Plus, History, Layers, Trash2 } from 'lucide-react';
 import StatusSelect from './StatusSelect';
 import HistoricoPainel from './HistoricoPainel';
 import RegistrarAlteracaoDialog from './RegistrarAlteracaoDialog';
@@ -48,6 +48,7 @@ export default function DemandaForm({
   onCriarStatus,
   onGerenciarStatus,
   onRegistrarAlteracao,
+  onDelete,
 }) {
   const [form, setForm] = useState(VAZIO);
   const [salvando, setSalvando] = useState(false);
@@ -387,13 +388,30 @@ export default function DemandaForm({
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button onClick={salvar} disabled={!form.cliente.trim() || salvando}>
-              {salvando ? 'Salvando...' : demanda ? 'Salvar alterações' : 'Adicionar à fila'}
-            </Button>
+          <DialogFooter className="flex-row items-center justify-between sm:justify-between w-full">
+            {demanda && onDelete ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  onDelete(demanda);
+                }}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive h-9 px-2.5 text-xs font-medium cursor-pointer"
+              >
+                <Trash2 size={14} className="mr-1" />
+                Excluir
+              </Button>
+            ) : <div />}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={onClose} className="cursor-pointer">
+                Cancelar
+              </Button>
+              <Button onClick={salvar} disabled={!form.cliente.trim() || salvando} className="cursor-pointer">
+                {salvando ? 'Salvando...' : demanda ? 'Salvar alterações' : 'Adicionar à fila'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -20,6 +20,7 @@ import {
   Trash2,
   Plus,
   Camera,
+  Briefcase,
 } from 'lucide-react';
 import { localClient } from '@/api/localClient';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,7 @@ import {
 import UserAvatar from '@/components/ui/UserAvatar';
 import AcessoNegado from '@/components/auth/AcessoNegado';
 import { useAuth } from '@/contexts/AuthContext';
-import { processAvatarFile, saveAvatar } from '@/lib/avatarService';
+import { processAvatarFile } from '@/lib/avatarService';
 import {
   PERFIS,
   PERFIS_LABELS,
@@ -65,6 +66,7 @@ const ROLE_ICONS = {
   [PERFIS.DESIGNER]: Palette,
   [PERFIS.PRINTER]: Printer,
   [PERFIS.SELLER]: ShoppingBag,
+  [PERFIS.CONSULTANT]: Briefcase,
 };
 
 export default function Admin() {
@@ -83,7 +85,14 @@ export default function Admin() {
     atualizarConfiguracao,
   } = useAuth();
 
-  const [abaAtiva, setAbaAtiva] = useState('usuarios');
+  const canManageUsers = can('users_manage') || usuario?.role === PERFIS.ADMIN || usuario?.is_admin;
+  const canManageRevendas = can('revendas_manage') || can('settings_manage') || canManageUsers;
+
+  const [abaAtiva, setAbaAtiva] = useState(() => {
+    if (canManageUsers) return 'usuarios';
+    if (canManageRevendas) return 'revendas';
+    return 'usuarios';
+  });
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(false);
   const [modalNovoOpen, setModalNovoOpen] = useState(false);
@@ -345,8 +354,8 @@ export default function Admin() {
     }
   }
 
-  if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN) {
-    return <AcessoNegado mensagem="Esta área é de acesso exclusivo para administradores do sistema." />;
+  if (!canManageUsers && !canManageRevendas) {
+    return <AcessoNegado mensagem="Esta área é de acesso exclusivo para administradores e consultores autorizados." />;
   }
 
   return (
@@ -358,19 +367,23 @@ export default function Admin() {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
               <Shield size={18} />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Administração</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              {canManageUsers ? 'Administração' : 'Gestão de Revendas'}
+            </h1>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Controle de usuários, revendas cadastradas, permissões granulares e auditoria do sistema.
+            {canManageUsers
+              ? 'Controle de usuários, revendas cadastradas, permissões granulares e auditoria do sistema.'
+              : 'Gerencie o catálogo de revendas parceiras e suas logomarcas.'}
           </p>
         </div>
 
-        {abaAtiva === 'usuarios' && (
+        {abaAtiva === 'usuarios' && canManageUsers && (
           <Button onClick={abrirNovoUsuario} className="font-semibold shadow-xs">
             <UserPlus size={16} className="mr-1.5" /> Adicionar usuário
           </Button>
         )}
-        {abaAtiva === 'revendas' && (
+        {abaAtiva === 'revendas' && canManageRevendas && (
           <Button onClick={abrirNovaRevenda} className="font-semibold shadow-xs">
             <Plus size={16} className="mr-1.5" /> Adicionar revenda
           </Button>
@@ -379,19 +392,27 @@ export default function Admin() {
 
       {/* Abas da Administração */}
       <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="space-y-4">
-        <TabsList className="grid grid-cols-4 max-w-xl">
-          <TabsTrigger value="usuarios" className="flex items-center gap-1.5">
-            <Users size={14} /> Usuários ({usuarios.length})
-          </TabsTrigger>
-          <TabsTrigger value="revendas" className="flex items-center gap-1.5">
-            <Building2 size={14} /> Revendas ({revendas.length})
-          </TabsTrigger>
-          <TabsTrigger value="configuracoes" className="flex items-center gap-1.5">
-            <Settings size={14} /> Configurações
-          </TabsTrigger>
-          <TabsTrigger value="auditoria" className="flex items-center gap-1.5">
-            <History size={14} /> Auditoria
-          </TabsTrigger>
+        <TabsList className={`grid max-w-xl ${canManageUsers ? 'grid-cols-4' : 'grid-cols-1 max-w-xs'}`}>
+          {canManageUsers && (
+            <TabsTrigger value="usuarios" className="flex items-center gap-1.5">
+              <Users size={14} /> Usuários ({usuarios.length})
+            </TabsTrigger>
+          )}
+          {canManageRevendas && (
+            <TabsTrigger value="revendas" className="flex items-center gap-1.5">
+              <Building2 size={14} /> Revendas ({revendas.length})
+            </TabsTrigger>
+          )}
+          {canManageUsers && (
+            <TabsTrigger value="configuracoes" className="flex items-center gap-1.5">
+              <Settings size={14} /> Configurações
+            </TabsTrigger>
+          )}
+          {canManageUsers && (
+            <TabsTrigger value="auditoria" className="flex items-center gap-1.5">
+              <History size={14} /> Auditoria
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ABA: USUÁRIOS */}
@@ -450,12 +471,12 @@ export default function Admin() {
                           </td>
                           <td className="py-3 px-4">
                             {isAtivo ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" /> Ativo
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/60">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" /> Ativo
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200">
-                                <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" /> Inativo
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800/60 dark:text-zinc-400 dark:border-zinc-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" /> Inativo
                               </span>
                             )}
                           </td>
@@ -753,6 +774,11 @@ export default function Admin() {
                       <ShoppingBag size={14} /> Vendedor
                     </div>
                   </SelectItem>
+                  <SelectItem value={PERFIS.CONSULTANT}>
+                    <div className="flex items-center gap-2">
+                      <Briefcase size={14} /> Consultor
+                    </div>
+                  </SelectItem>
                   <SelectItem value={PERFIS.DESIGNER}>
                     <div className="flex items-center gap-2">
                       <Palette size={14} /> Designer
@@ -836,6 +862,7 @@ export default function Admin() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={PERFIS.SELLER}>Vendedor</SelectItem>
+                    <SelectItem value={PERFIS.CONSULTANT}>Consultor</SelectItem>
                     <SelectItem value={PERFIS.DESIGNER}>Designer</SelectItem>
                     <SelectItem value={PERFIS.PRINTER}>Impressor</SelectItem>
                     <SelectItem value={PERFIS.ADMIN}>Administrador</SelectItem>

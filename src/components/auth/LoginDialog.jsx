@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, Sparkles, LogIn, AlertCircle } from 'lucide-react';
+import { Mail, LogIn, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { BorderBeam } from '@/components/ui/border-beam';
+import TackyBorder from '@/components/ui/TackyBorder';
 import DotsCanvas from '@/components/ui/DotsCanvas';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -35,18 +35,6 @@ export default function LoginDialog() {
 
   const formContent = (
     <div className="relative z-10 space-y-4">
-      <div className="text-center pb-1 space-y-1.5">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-2 shadow-xs">
-          <Sparkles size={22} />
-        </div>
-        <h2 className="text-xl font-bold text-center text-foreground tracking-tight">
-          Acesso ao Fluxo de Clientes
-        </h2>
-        <p className="text-xs text-center text-muted-foreground">
-          Acesso restrito para colaboradores autorizados. Informe seu e-mail corporativo.
-        </p>
-      </div>
-
       {erro && (
         <div className="p-3 text-xs rounded-lg bg-destructive/10 text-destructive font-medium border border-destructive/20 flex items-start gap-2 leading-relaxed animate-in fade-in">
           <AlertCircle size={15} className="shrink-0 mt-0.5" />
@@ -97,10 +85,6 @@ export default function LoginDialog() {
           )}
         </div>
       </form>
-
-      <div className="pt-2 text-center text-[11px] text-muted-foreground border-t border-border/60">
-        Precisa de acesso? Solicite o cadastro ao Administrador da empresa.
-      </div>
     </div>
   );
 
@@ -109,27 +93,45 @@ export default function LoginDialog() {
     return (
       <div className="fixed inset-0 z-50 bg-[#000000] flex items-center justify-center p-4">
         <DotsCanvas />
-        <div className="relative z-10 w-full max-w-[380px] rounded-2xl border border-border bg-card p-6 shadow-2xl overflow-hidden">
-          <BorderBeam duration={8} size={150} />
-          {formContent}
+        <div className="relative z-10 w-full max-w-[390px]">
+          <TackyBorder
+            borderRadius="1.25rem"
+            borderWidth={2}
+            duration={6}
+            glow={true}
+            colors={['#00f2fe', '#4facfe', '#7f00ff', '#e100ff', '#ff0844', '#ffb199', '#00f2fe']}
+          >
+            <div className="bg-card p-6 sm:p-7 shadow-2xl rounded-[1.25rem]">
+              {formContent}
+            </div>
+          </TackyBorder>
         </div>
       </div>
-    );
+      );
   }
 
-  // Se estiver autenticado e abriu o modal (para trocar de usuário)
-  return (
-    <Dialog
-      open={loginModalOpen}
-      onOpenChange={(open) => {
-        if (!open && !canClose) return;
-        setLoginModalOpen(open);
-      }}
-    >
-      <DialogContent className="sm:max-w-[380px] p-6 relative overflow-hidden">
-        <BorderBeam duration={8} size={150} />
-        {formContent}
-      </DialogContent>
-    </Dialog>
-  );
+      // Se estiver autenticado e abriu o modal (para trocar de usuário)
+      return (
+      <Dialog
+        open={loginModalOpen}
+        onOpenChange={(open) => {
+          if (!open && !canClose) return;
+          setLoginModalOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-[390px] p-0 bg-transparent border-0 shadow-none overflow-visible">
+          <TackyBorder
+            borderRadius="1.25rem"
+            borderWidth={2}
+            duration={6}
+            glow={true}
+            colors={['#00f2fe', '#4facfe', '#7f00ff', '#e100ff', '#ff0844', '#ffb199', '#00f2fe']}
+          >
+            <div className="bg-card p-6 sm:p-7 shadow-2xl rounded-[1.25rem]">
+              {formContent}
+            </div>
+          </TackyBorder>
+        </DialogContent>
+      </Dialog>
+      );
 }

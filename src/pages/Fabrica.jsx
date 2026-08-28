@@ -7,9 +7,7 @@ import FabricaFiltros from '@/components/fabrica/FabricaFiltros';
 import AcessoNegado from '@/components/auth/AcessoNegado';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  gerarEntradasEdicao,
   entradaSituacao,
-  entradaInicioImpressao,
   entradaConclusaoImpressao,
   entradaStatusFabrica,
 } from '@/lib/historico';
@@ -72,8 +70,12 @@ export default function Fabrica() {
       .filter((d) => {
         const st = statusMap[d.status_id];
         const estaConcluido = Boolean(st?.concluido || d.completed_at);
-        const estaEmImpressao = d.factory_status === 'em_impressao' || d.factory_status === 'na_fila' || d.factory_status === 'pausado';
-        return !estaConcluido && estaEmImpressao;
+        const estaNaFabrica =
+          d.factory_status === 'aguardando' ||
+          d.factory_status === 'em_impressao' ||
+          d.factory_status === 'na_fila' ||
+          d.factory_status === 'pausado';
+        return !estaConcluido && estaNaFabrica;
       })
       .map((d, index) => ({
         ...d,
@@ -160,6 +162,12 @@ export default function Fabrica() {
 
   // Atualização rápida de campos no card da fábrica
   async function quickUpdateDemanda(demanda, patch) {
+    let historico = demanda.historico || [];
+    if (patch.factory_status && patch.factory_status !== demanda.factory_status) {
+      const entrada = entradaStatusFabrica(demanda.factory_status, patch.factory_status, usuario);
+      historico = [entrada, ...historico];
+      patch.historico = historico;
+    }
     const updatedData = { ...demanda, ...patch };
     setDemandas((prev) => prev.map((d) => (d.id === demanda.id ? updatedData : d)));
 
@@ -218,7 +226,7 @@ export default function Fabrica() {
       descricao: `${usuario?.nome || 'Impressor'} devolveu a demanda para a fila de Prioridade`,
     };
     const historico = [entrada, ...(demanda.historico || [])];
-    const patch = { factory_status: 'aguardando', historico };
+    const patch = { factory_status: 'pendente_design', historico };
     setDemandas((prev) => prev.map((d) => (d.id === demanda.id ? { ...d, ...patch } : d)));
     try {
       await localClient.entities.Demanda.update(demanda.id, patch);

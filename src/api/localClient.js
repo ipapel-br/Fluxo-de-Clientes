@@ -20,9 +20,12 @@ const createId = (prefix) => {
 const defaultStatuses = () => {
   const timestamp = now();
   return [
-    { id: 'status_a_fazer', nome: 'A fazer', cor: '#64748b', concluido: false, ordem: 0, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_em_andamento', nome: 'Em andamento', cor: '#f59e0b', concluido: false, ordem: 1, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_concluido', nome: 'Concluído', cor: '#16a34a', concluido: true, ordem: 2, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_parado', nome: 'Parado', cor: '#ef4444', concluido: false, ordem: 0, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_criacao', nome: 'Criação', cor: '#f59e0b', concluido: false, ordem: 1, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_revisao', nome: 'Revisão', cor: '#f97316', concluido: false, ordem: 2, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_amostra', nome: 'Amostra', cor: '#06b6d4', concluido: false, ordem: 3, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_impressao', nome: 'Impressão', cor: '#64748b', concluido: false, ordem: 4, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_concluido', nome: 'Concluído', cor: '#22c55e', concluido: true, ordem: 5, created_date: timestamp, updated_date: timestamp },
   ];
 };
 
@@ -33,7 +36,19 @@ const defaultUsuarios = () => {
       id: 'usuario_admin_alan',
       nome: 'Alan Santos',
       email: 'alan.d.santos2021@gmail.com',
-      role: 'admin',
+      role: 'designer',
+      is_admin: true,
+      status: 'ativo',
+      permissoes_extras: {},
+      created_date: timestamp,
+      updated_date: timestamp,
+      last_access_at: timestamp,
+    },
+    {
+      id: 'usuario_grace_helen',
+      nome: 'Grace Helen',
+      email: 'grace@fluxodeclientes.com',
+      role: 'consultant',
       status: 'ativo',
       permissoes_extras: {},
       created_date: timestamp,
@@ -45,6 +60,7 @@ const defaultUsuarios = () => {
       nome: 'Administrador',
       email: 'admin@fluxodeclientes.com',
       role: 'admin',
+      is_admin: true,
       status: 'ativo',
       permissoes_extras: {},
       created_date: timestamp,
@@ -89,7 +105,7 @@ function normalizeState(value) {
       ? value.data.Usuario.map(normalizeUsuario)
       : defaultUsuarios();
 
-  // Garantir que alan.d.santos2021@gmail.com esteja presente e com perfil admin
+  // Garantir que alan.d.santos2021@gmail.com esteja presente com perfil designer e flag admin
   const alanEmail = 'alan.d.santos2021@gmail.com';
   const alanIndex = usuarios.findIndex(
     (u) => (u.email || '').toLowerCase().trim() === alanEmail
@@ -97,7 +113,8 @@ function normalizeState(value) {
   if (alanIndex >= 0) {
     usuarios[alanIndex] = {
       ...usuarios[alanIndex],
-      role: 'admin',
+      role: usuarios[alanIndex].role === 'admin' ? 'designer' : (usuarios[alanIndex].role || 'designer'),
+      is_admin: true,
       status: 'ativo',
     };
   } else {
@@ -105,7 +122,8 @@ function normalizeState(value) {
       id: 'usuario_admin_alan',
       nome: 'Alan Santos',
       email: alanEmail,
-      role: 'admin',
+      role: 'designer',
+      is_admin: true,
       status: 'ativo',
       permissoes_extras: {},
       created_date: now(),
@@ -131,9 +149,30 @@ function normalizeState(value) {
       ? value.data.Notificacao
       : [];
 
+  // 1. Lista canônica e estrita de status:
+  // Parado, Criação, Revisão, Amostra, Impressão, Concluído
+  const padraoStatuses = defaultStatuses();
+  
+  // Mapa de normalização de IDs antigos ou nomes similares
+  const aliasMap = {
+    'status_a_fazer': 'status_parado',
+    'status_em_andamento': 'status_criacao',
+    'a fazer': 'status_parado',
+    'em andamento': 'status_criacao',
+  };
+
+  // Atualizar status_id em demandas caso apontem para status legados
+  const demandasNormalizadas = demandas.map((d) => {
+    let sid = d.status_id;
+    if (aliasMap[sid]) {
+      sid = aliasMap[sid];
+    }
+    return { ...d, status_id: sid };
+  });
+
   return {
-    demandas: clone(demandas),
-    statuses: statuses.length > 0 ? clone(statuses) : defaultStatuses(),
+    demandas: clone(demandasNormalizadas),
+    statuses: clone(padraoStatuses),
     usuarios: usuarios.length > 0 ? clone(usuarios) : defaultUsuarios(),
     revendas: revendas.length > 0 ? clone(revendas) : defaultRevendas(),
     audit_logs: clone(audit_logs),
@@ -142,29 +181,43 @@ function normalizeState(value) {
   };
 }
 
+let inMemoryState = null;
+
 function readState() {
-  if (typeof window === 'undefined') return initialState();
+  if (inMemoryState) return inMemoryState;
+
+  if (typeof window === 'undefined') {
+    inMemoryState = initialState();
+    return inMemoryState;
+  }
 
   for (const key of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = window.localStorage ? window.localStorage.getItem(key) : null;
       if (!raw) continue;
       const state = normalizeState(JSON.parse(raw));
       if (key !== STORAGE_KEY) writeState(state);
+      inMemoryState = state;
       return state;
     } catch {
-      // Ignore malformed values
+      // Storage access blocked or malformed JSON
     }
   }
 
   const state = initialState();
+  inMemoryState = state;
   writeState(state);
   return state;
 }
 
 function writeState(state) {
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  inMemoryState = state;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+  } catch {
+    // Storage access blocked (e.g. iframe, third-party cookies disabled)
   }
 }
 
@@ -300,6 +353,9 @@ export const localClient = {
     Revenda: isSupabaseConfigured
       ? createSupabaseEntityApi('Revenda')
       : createLocalStorageEntityApi('Revenda'),
+    Notificacao: isSupabaseConfigured
+      ? createSupabaseEntityApi('Notificacao')
+      : createLocalStorageEntityApi('Notificacao'),
   },
 };
 

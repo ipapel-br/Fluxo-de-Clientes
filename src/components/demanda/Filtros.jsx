@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import {
   Select,
@@ -10,8 +11,23 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/ui/UserAvatar';
 
-function FilterSelect({ value, onChange, options, placeholder, showAvatar = false }) {
+function FilterSelect({ value, onChange, options = [], placeholder, showAvatar = false }) {
   const ALL = '__all__';
+
+  // Deduplicar opções para garantir chaves únicas no React Select
+  const uniqueOptions = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    (options || []).forEach((o) => {
+      const val = typeof o === 'object' ? (o.value || o.nome || '') : o;
+      if (val && !seen.has(val)) {
+        seen.add(val);
+        list.push(typeof o === 'object' ? o : { value: o, label: o });
+      }
+    });
+    return list;
+  }, [options]);
+
   return (
     <Select
       value={value || ALL}
@@ -22,7 +38,7 @@ function FilterSelect({ value, onChange, options, placeholder, showAvatar = fals
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ALL}>{placeholder} (Todos)</SelectItem>
-        {options.map((o) => (
+        {uniqueOptions.map((o) => (
           <SelectItem key={o.value} value={o.value}>
             <div className="flex items-center gap-2">
               {showAvatar && o.value && (

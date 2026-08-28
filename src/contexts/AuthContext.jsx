@@ -44,9 +44,10 @@ export function AuthProvider({ children }) {
       const stored = safeStorageGet(AUTH_STORAGE_KEY);
       if (!stored) return null;
       const parsed = JSON.parse(stored);
-      // Garantir que alan.d.santos2021@gmail.com sempre tenha perfil admin
+      // Garantir que alan.d.santos2021@gmail.com tenha acesso admin e perfil designer/admin
       if (parsed && (parsed.email || '').toLowerCase().trim() === 'alan.d.santos2021@gmail.com') {
-        parsed.role = 'admin';
+        parsed.is_admin = true;
+        if (!parsed.role) parsed.role = 'designer';
       }
       return parsed;
     } catch {
@@ -203,12 +204,13 @@ export function AuthProvider({ children }) {
         (u) => (u.email || '').trim().toLowerCase() === emailLimpo
       );
 
-      // Se for o e-mail do admin Alan Santos e não estiver cadastrado ainda, provisiona automaticamente
+      // Se for o e-mail do Alan Santos e não estiver cadastrado ainda, provisiona automaticamente como Designer + Admin
       if (!encontrado && emailLimpo === 'alan.d.santos2021@gmail.com') {
         const novoAdmin = await localClient.entities.Usuario.create({
           nome: 'Alan Santos',
           email: 'alan.d.santos2021@gmail.com',
-          role: PERFIS.ADMIN,
+          role: PERFIS.DESIGNER,
+          is_admin: true,
           status: 'ativo',
           permissoes_extras: {},
         });
@@ -243,10 +245,17 @@ export function AuthProvider({ children }) {
 
       const agora = new Date().toISOString();
 
-      // Garantir que alan.d.santos2021@gmail.com sempre seja admin (corrige dados antigos)
-      if (emailLimpo === 'alan.d.santos2021@gmail.com' && encontrado.role !== PERFIS.ADMIN) {
-        encontrado.role = PERFIS.ADMIN;
-        await localClient.entities.Usuario.update(encontrado.id, { role: PERFIS.ADMIN, last_access_at: agora });
+      // Garantir que alan.d.santos2021@gmail.com sempre tenha is_admin = true e papel Designer (ou o selecionado)
+      if (emailLimpo === 'alan.d.santos2021@gmail.com') {
+        encontrado.is_admin = true;
+        if (encontrado.role === PERFIS.ADMIN) {
+          encontrado.role = PERFIS.DESIGNER;
+        }
+        await localClient.entities.Usuario.update(encontrado.id, {
+          is_admin: true,
+          role: encontrado.role || PERFIS.DESIGNER,
+          last_access_at: agora,
+        });
       } else {
         await localClient.entities.Usuario.update(encontrado.id, { last_access_at: agora });
       }
@@ -257,7 +266,8 @@ export function AuthProvider({ children }) {
         nome: encontrado.nome,
         email: encontrado.email,
         avatar_url: encontrado.avatar_url || '',
-        role: encontrado.role || PERFIS.SELLER,
+        role: encontrado.role || PERFIS.DESIGNER,
+        is_admin: encontrado.is_admin || encontrado.role === PERFIS.ADMIN || emailLimpo === 'alan.d.santos2021@gmail.com',
         status: encontrado.status || 'ativo',
         permissoes_extras: encontrado.permissoes_extras || {},
         last_access_at: agora,
@@ -464,22 +474,22 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Listas de usuários ativos categorizados por papel
+  // Listas de usuários ativos categorizados estritamente por papel base
   const vendedoresCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.SELLER || u.role === PERFIS.ADMIN))
+      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.SELLER || u.role === PERFIS.CONSULTANT))
       .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
   }, [usuariosLista]);
 
   const designersCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.DESIGNER || u.role === PERFIS.ADMIN))
+      .filter((u) => u.status === 'ativo' && u.role === PERFIS.DESIGNER)
       .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
   }, [usuariosLista]);
 
   const impressoresCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.PRINTER || u.role === PERFIS.ADMIN))
+      .filter((u) => u.status === 'ativo' && u.role === PERFIS.PRINTER)
       .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
   }, [usuariosLista]);
 
@@ -487,7 +497,7 @@ export function AuthProvider({ children }) {
    * Adicionar Revenda
    */
   async function adicionarRevenda({ nome, logo_url = '' }) {
-    if (!can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
+    if (!can('revendas_manage') && !can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
       return { success: false, error: 'Sem permissão para cadastrar revendas.' };
     }
     try {
@@ -510,7 +520,7 @@ export function AuthProvider({ children }) {
    * Atualizar Revenda
    */
   async function atualizarRevenda(id, patch) {
-    if (!can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
+    if (!can('revendas_manage') && !can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
       return { success: false, error: 'Sem permissão para editar revendas.' };
     }
     try {
@@ -530,7 +540,7 @@ export function AuthProvider({ children }) {
    * Excluir Revenda
    */
   async function excluirRevenda(id) {
-    if (!can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
+    if (!can('revendas_manage') && !can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
       return { success: false, error: 'Sem permissão para excluir revendas.' };
     }
     try {

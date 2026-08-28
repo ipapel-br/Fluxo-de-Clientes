@@ -2,6 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { ListOrdered, Printer, CheckCircle2, Shield } from 'lucide-react';
 import UserMenu from '@/components/auth/UserMenu';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Layout() {
@@ -15,7 +16,7 @@ export default function Layout() {
   const showPriority = can('priority_view');
   const showFactory = can('factory_view');
   const showCompleted = can('completed_view');
-  const showAdmin = can('users_manage') || usuario?.role === 'admin';
+  const showAdmin = can('users_manage') || can('revendas_manage') || usuario?.role === 'admin' || usuario?.is_admin;
 
   return (
     <div className="min-h-screen bg-background">
@@ -28,7 +29,7 @@ export default function Layout() {
             <span className="font-semibold tracking-tight">Fluxo de Clientes</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <nav className="flex items-center gap-1">
               {showPriority && (
                 <NavLink to="/" end className={navClass}>
@@ -57,6 +58,8 @@ export default function Layout() {
             </nav>
 
             <div className="h-5 w-px bg-border hidden sm:block" />
+
+            <ThemeToggle />
 
             <NotificationBell />
 

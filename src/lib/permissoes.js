@@ -8,6 +8,7 @@ export const PERFIS = {
   SELLER: 'seller',
   DESIGNER: 'designer',
   PRINTER: 'printer',
+  CONSULTANT: 'consultant',
 };
 
 export const PERFIS_LABELS = {
@@ -15,6 +16,7 @@ export const PERFIS_LABELS = {
   [PERFIS.SELLER]: 'Vendedor',
   [PERFIS.DESIGNER]: 'Designer',
   [PERFIS.PRINTER]: 'Impressor',
+  [PERFIS.CONSULTANT]: 'Consultor',
 };
 
 export const PERMISSOES_DEFINICAO = [
@@ -53,6 +55,7 @@ export const PERMISSOES_DEFINICAO = [
   {
     modulo: 'ADMINISTRAÇÃO',
     permissoes: [
+      { key: 'revendas_manage', label: 'Gerenciar revendas', descricao: 'Cadastrar, editar e excluir revendas parceiras' },
       { key: 'users_manage', label: 'Gerenciar usuários e permissões', descricao: 'Cadastrar, editar, desativar e alterar permissões' },
       { key: 'settings_manage', label: 'Gerenciar configurações do sistema', descricao: 'Alterar regras e configurações globais' },
     ],
@@ -74,6 +77,7 @@ export const PERMISSOES_PADRAO_POR_PERFIL = {
     'completed_view',
     'completed_reopen',
     'history_view',
+    'revendas_manage',
     'users_manage',
     'settings_manage',
     'admin_full_access',
@@ -84,6 +88,14 @@ export const PERMISSOES_PADRAO_POR_PERFIL = {
     'priority_edit',
     'completed_view',
     'history_view',
+  ],
+  [PERFIS.CONSULTANT]: [
+    'priority_view',
+    'priority_create',
+    'priority_edit',
+    'completed_view',
+    'history_view',
+    'revendas_manage',
   ],
   [PERFIS.DESIGNER]: [
     'priority_view',

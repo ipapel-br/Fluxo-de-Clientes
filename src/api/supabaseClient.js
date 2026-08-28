@@ -15,9 +15,50 @@ export const isSupabaseConfigured = Boolean(
   !supabaseUrl.includes('sua-url-aqui')
 );
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+const customStorage = {
+  getItem: (key) => {
+    try {
+      return typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem(key) : null;
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) window.localStorage.setItem(key, value);
+    } catch {}
+  },
+  removeItem: (key) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) window.localStorage.removeItem(key);
+    } catch {}
+  },
+};
+
+function getSupabaseInstance() {
+  if (!isSupabaseConfigured) return null;
+  if (typeof window !== 'undefined') {
+    if (!window.__SUPABASE_CLIENT__) {
+      window.__SUPABASE_CLIENT__ = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          storage: customStorage,
+        },
+      });
+    }
+    return window.__SUPABASE_CLIENT__;
+  }
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      storage: customStorage,
+    },
+  });
+}
+
+export const supabase = getSupabaseInstance();
 
 const createId = (prefix) => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -29,6 +70,12 @@ const createId = (prefix) => {
 export function normalizeDemanda(item) {
   if (!item) return item;
   const etiqueta = item.etiqueta || (Array.isArray(item.etiquetas) && item.etiquetas[0]) || '';
+  
+  let factoryStatus = item.factory_status;
+  if (!factoryStatus) {
+    factoryStatus = item.status_id === 'status_impressao' ? 'aguardando' : 'pendente_design';
+  }
+
   return {
     ...item,
     etiqueta,
@@ -38,7 +85,7 @@ export function normalizeDemanda(item) {
     vendedor: item.vendedor || '',
     revenda: item.revenda || '',
     acabamento: item.acabamento || 'Autocolante',
-    factory_status: item.factory_status || 'aguardando',
+    factory_status: factoryStatus,
     urgencia: item.urgencia || 'rotina',
     design_position: item.design_position !== undefined ? item.design_position : (item.ordem || 0),
     factory_position: item.factory_position !== undefined ? item.factory_position : (item.ordem || 0),
@@ -99,6 +146,7 @@ const TABLE_MAP = {
   Status: 'statuses',
   AuditLog: 'audit_logs',
   Configuracao: 'configuracoes',
+  Revenda: 'revendas',
   Notificacao: 'notificacoes',
 };
 
@@ -147,12 +195,20 @@ export function createSupabaseEntityApi(entityName) {
       const currentPayload = {
         ...record,
         id: record.id || createId(idPrefix),
-        created_date: record.created_date || now,
-        updated_date: now,
       };
 
-      if (entityName === 'Demanda' && currentPayload.etiqueta !== undefined) {
-        currentPayload.etiquetas = currentPayload.etiqueta ? [currentPayload.etiqueta] : [];
+      if (entityName === 'Notificacao' || entityName === 'Revenda' || entityName === 'AuditLog' || entityName === 'Configuracao') {
+        currentPayload.created_at = record.created_at || now;
+      } else {
+        currentPayload.created_date = record.created_date || now;
+        currentPayload.updated_date = now;
+      }
+
+      if (entityName === 'Demanda') {
+        if (currentPayload.etiqueta !== undefined) {
+          currentPayload.etiquetas = currentPayload.etiqueta ? [currentPayload.etiqueta] : [];
+          delete currentPayload.etiqueta;
+        }
       }
 
       for (let attempt = 0; attempt < 4; attempt++) {
@@ -197,8 +253,11 @@ export function createSupabaseEntityApi(entityName) {
         updated_date: now,
       };
 
-      if (entityName === 'Demanda' && currentPayload.etiqueta !== undefined) {
-        currentPayload.etiquetas = currentPayload.etiqueta ? [currentPayload.etiqueta] : [];
+      if (entityName === 'Demanda') {
+        if (currentPayload.etiqueta !== undefined) {
+          currentPayload.etiquetas = currentPayload.etiqueta ? [currentPayload.etiqueta] : [];
+          delete currentPayload.etiqueta;
+        }
       }
 
       for (let attempt = 0; attempt < 4; attempt++) {

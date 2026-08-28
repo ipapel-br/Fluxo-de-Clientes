@@ -45,6 +45,7 @@ ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS completed_by TEXT;
 ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS seller_id TEXT;
 ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS designer_id TEXT;
+ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS bitrix_id TEXT;
 
 -- Sincronizar design_position inicial com ordem existente caso esteja zerado
 UPDATE public.demandas SET design_position = ordem WHERE design_position = 0 AND ordem > 0;
@@ -113,31 +114,52 @@ CREATE TABLE IF NOT EXISTS public.notificacoes (
     target_roles JSONB NOT NULL DEFAULT '["admin"]'::jsonb,
     read_by JSONB NOT NULL DEFAULT '[]'::jsonb,
     link_path TEXT DEFAULT '/',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_date TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Índices para performance
+ALTER TABLE public.notificacoes ADD COLUMN IF NOT EXISTS updated_date TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.notificacoes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 7. Tabela de Revendas Parceiras
+CREATE TABLE IF NOT EXISTS public.revendas (
+    id TEXT PRIMARY KEY DEFAULT ('revenda_' || substr(md5(random()::text), 1, 8)),
+    nome TEXT NOT NULL,
+    contato TEXT,
+    telefone TEXT,
+    email TEXT,
+    logo_url TEXT,
+    status TEXT NOT NULL DEFAULT 'ativo',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 8. Índices para performance
 CREATE INDEX IF NOT EXISTS idx_demandas_status_id ON public.demandas(status_id);
 CREATE INDEX IF NOT EXISTS idx_demandas_ordem ON public.demandas(ordem);
 CREATE INDEX IF NOT EXISTS idx_demandas_design_position ON public.demandas(design_position);
 CREATE INDEX IF NOT EXISTS idx_demandas_factory_position ON public.demandas(factory_position);
 CREATE INDEX IF NOT EXISTS idx_demandas_acabamento ON public.demandas(acabamento);
 CREATE INDEX IF NOT EXISTS idx_demandas_factory_status ON public.demandas(factory_status);
+CREATE INDEX IF NOT EXISTS idx_demandas_bitrix_id ON public.demandas(bitrix_id);
 CREATE INDEX IF NOT EXISTS idx_statuses_ordem ON public.statuses(ordem);
 CREATE INDEX IF NOT EXISTS idx_usuarios_email ON public.usuarios(email);
 CREATE INDEX IF NOT EXISTS idx_usuarios_role ON public.usuarios(role);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notificacoes_created_at ON public.notificacoes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_revendas_nome ON public.revendas(nome);
 
--- 8. Habilitação de Row Level Security (RLS)
+-- 9. Habilitação de Row Level Security (RLS)
 ALTER TABLE public.statuses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.demandas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notificacoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.revendas ENABLE ROW LEVEL SECURITY;
 
--- 9. Políticas de acesso
+-- 10. Políticas de acesso
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'statuses' AND policyname = 'Permitir acesso completo a statuses') THEN
@@ -163,21 +185,31 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notificacoes' AND policyname = 'Permitir acesso completo a notificacoes') THEN
         CREATE POLICY "Permitir acesso completo a notificacoes" ON public.notificacoes FOR ALL USING (true) WITH CHECK (true);
     END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'revendas' AND policyname = 'Permitir acesso completo a revendas') THEN
+        CREATE POLICY "Permitir acesso completo a revendas" ON public.revendas FOR ALL USING (true) WITH CHECK (true);
+    END IF;
 END $$;
 
--- 9. Inserção de Status padrão iniciais
+-- 11. Inserção de Status padrão iniciais
 INSERT INTO public.statuses (id, nome, cor, concluido, ordem)
 VALUES
-    ('status_a_fazer', 'A fazer', '#64748b', FALSE, 0),
-    ('status_em_andamento', 'Em andamento', '#f59e0b', FALSE, 1),
-    ('status_concluido', 'Concluído', '#16a34a', TRUE, 2)
-ON CONFLICT (id) DO NOTHING;
+    ('status_parado', 'Parado', '#ef4444', FALSE, 0),
+    ('status_criacao', 'Criação', '#f59e0b', FALSE, 1),
+    ('status_revisao', 'Revisão', '#f97316', FALSE, 2),
+    ('status_amostra', 'Amostra', '#06b6d4', FALSE, 3),
+    ('status_impressao', 'Impressão', '#64748b', FALSE, 4),
+    ('status_concluido', 'Concluído', '#22c55e', TRUE, 5)
+ON CONFLICT (id) DO UPDATE SET
+    nome = EXCLUDED.nome,
+    cor = EXCLUDED.cor,
+    concluido = EXCLUDED.concluido,
+    ordem = EXCLUDED.ordem;
 
--- 10. Inserção do Administrador Principal
+-- 12. Inserção de Usuários padrão iniciais
 INSERT INTO public.usuarios (id, nome, email, role, status, permissoes_extras)
 VALUES
-    ('usuario_admin_alan', 'Alan Santos', 'alan.d.santos2021@gmail.com', 'admin', 'ativo', '{}'::jsonb)
-ON CONFLICT (email) DO UPDATE SET
-    role = 'admin',
-    status = 'ativo';
+    ('usuario_admin_alan', 'Alan Santos', 'alan.d.santos2021@gmail.com', 'designer', 'ativo', '{"users_manage": true, "settings_manage": true, "revendas_manage": true}'::jsonb),
+    ('usuario_grace_helen', 'Grace Helen', 'grace@fluxodeclientes.com', 'consultant', 'ativo', '{"revendas_manage": true}'::jsonb)
+ON CONFLICT (email) DO NOTHING;
 

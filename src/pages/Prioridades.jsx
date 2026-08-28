@@ -1,13 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
-import { Plus, List, LayoutGrid } from 'lucide-react';
+import { Plus, List, LayoutGrid, FileSpreadsheet } from 'lucide-react';
 import { localClient } from '@/api/localClient';
 import { Button } from '@/components/ui/button';
 import DemandaItem from '@/components/demanda/DemandaItem';
 import DemandaForm from '@/components/demanda/DemandaForm';
+import ImportCsvDialog from '@/components/demanda/ImportCsvDialog';
 import Filtros from '@/components/demanda/Filtros';
 import StatusForm from '@/components/demanda/StatusForm';
 import StatusManager from '@/components/demanda/StatusManager';
+import ExcluirDemandaDialog from '@/components/demanda/ExcluirDemandaDialog';
+import { toast } from '@/components/ui/use-toast';
 import AcessoNegado from '@/components/auth/AcessoNegado';
 import { useAuth } from '@/contexts/AuthContext';
 import { PERFIS } from '@/lib/permissoes';
@@ -36,8 +39,11 @@ export default function Prioridades() {
   const [filtros, setFiltros] = useState({ busca: '', vendedor: '', revenda: '', designer: '', status: '' });
   const [formOpen, setFormOpen] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [statusFormOpen, setStatusFormOpen] = useState(false);
   const [statusManagerOpen, setStatusManagerOpen] = useState(false);
+  const [demandaParaExcluir, setDemandaParaExcluir] = useState(null);
+  const [excluindoDemanda, setExcluindoDemanda] = useState(false);
   const [viewMode, setViewMode] = useState(() => {
     try {
       return localStorage.getItem('fluxo-clientes:view-mode') || 'lista';
@@ -81,8 +87,12 @@ export default function Prioridades() {
     let list = demandas.filter((d) => {
       const st = statusMap[d.status_id];
       const estaConcluido = Boolean(st?.concluido || d.completed_at);
-      const estaEmImpressao = d.factory_status === 'em_impressao' || d.factory_status === 'na_fila';
-      return !estaConcluido && !estaEmImpressao;
+      const estaNaFabrica =
+        d.factory_status === 'aguardando' ||
+        d.factory_status === 'em_impressao' ||
+        d.factory_status === 'na_fila' ||
+        d.factory_status === 'pausado';
+      return !estaConcluido && !estaNaFabrica;
     });
 
     // Se o sistema estiver configurado no Modo 2 (Vendedor vê apenas suas demandas)
@@ -255,7 +265,7 @@ export default function Prioridades() {
         design_position: maxOrdem + 1,
         factory_position: maxFactoryOrdem + 1,
         acabamento: data.acabamento || 'Autocolante',
-        factory_status: 'aguardando',
+        factory_status: 'pendente_design',
       });
       setDemandas((prev) => [...prev, nova]);
 
@@ -272,11 +282,32 @@ export default function Prioridades() {
     setFormOpen(false);
   }
 
-  async function excluirDemanda(demanda) {
+  function abrirModalExcluir(demanda) {
     if (!can('priority_edit')) return;
-    if (!window.confirm(`Excluir a demanda de "${demanda.cliente}"?`)) return;
-    await localClient.entities.Demanda.delete(demanda.id);
-    setDemandas((prev) => prev.filter((d) => d.id !== demanda.id));
+    setDemandaParaExcluir(demanda);
+  }
+
+  async function confirmarExcluirDemanda(demanda) {
+    if (!demanda || !can('priority_edit')) return;
+    setExcluindoDemanda(true);
+    try {
+      await localClient.entities.Demanda.delete(demanda.id);
+      setDemandas((prev) => prev.filter((d) => d.id !== demanda.id));
+      toast({
+        title: 'Demanda excluída',
+        description: `A demanda de "${demanda.cliente}" foi excluída com sucesso.`,
+      });
+      setDemandaParaExcluir(null);
+    } catch (err) {
+      console.error('Erro ao excluir demanda:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao excluir',
+        description: 'Não foi possível excluir a demanda. Tente novamente.',
+      });
+    } finally {
+      setExcluindoDemanda(false);
+    }
   }
 
   async function concluirDemanda(demanda) {
@@ -318,7 +349,7 @@ export default function Prioridades() {
     };
     const historico = [entradaImp, ...(demanda.historico || [])];
     const patch = {
-      factory_status: 'em_impressao',
+      factory_status: 'aguardando',
       fase_arte: 'Arte aprovada',
       historico,
     };
@@ -364,6 +395,17 @@ export default function Prioridades() {
   }
 
   async function quickUpdateDemanda(demanda, patch) {
+    // Sincronizar factory_status se o status geral for alterado para Impressão
+    if (patch.status_id && patch.status_id !== demanda.status_id) {
+      const stObj = statusMap[patch.status_id];
+      if (stObj && (stObj.id === 'status_impressao' || (stObj.nome || '').toLowerCase().includes('impress'))) {
+        patch.factory_status = 'aguardando';
+        if (!patch.fase_arte && !demanda.fase_arte) {
+          patch.fase_arte = 'Arte aprovada';
+        }
+      }
+    }
+
     const entradas = gerarEntradasEdicao(demanda, { ...demanda, ...patch }, statusMap, usuario);
     const historico = entradas.length > 0 ? [...entradas, ...(demanda.historico || [])] : (demanda.historico || []);
     const updatedData = { ...demanda, ...patch, historico };
@@ -429,6 +471,50 @@ export default function Prioridades() {
     setFormOpen(true);
   }
 
+  async function importarCsvDemandas(itensImportados) {
+    if (!Array.isArray(itensImportados) || itensImportados.length === 0) return;
+
+    let maxOrdem = ativas.reduce((m, d) => Math.max(m, d.ordem ?? 0), -1);
+    let maxFactoryOrdem = demandas.reduce((m, d) => Math.max(m, d.factory_position ?? 0), -1);
+
+    const novasDemandas = [];
+
+    for (const item of itensImportados) {
+      maxOrdem++;
+      maxFactoryOrdem++;
+
+      const historico = [
+        entradaCriacao(usuario),
+        ...(item.demanda ? [entradaSituacao(item.demanda, usuario)] : []),
+        ...(item.observacao ? [{ tipo: 'OBSERVACAO', data: new Date().toISOString(), autor: 'Bitrix CRM', descricao: item.observacao }] : []),
+      ];
+
+      const payload = {
+        cliente: item.cliente,
+        demanda: item.demanda || '',
+        prazo: item.prazo || '',
+        designer: item.designer || '',
+        vendedor: item.vendedor || '',
+        revenda: item.revenda || '',
+        acabamento: item.acabamento || 'Autocolante',
+        etiqueta: item.etiqueta || '',
+        status_id: item.status_id || (statuses[0]?.id || ''),
+        observacao: item.observacao || '',
+        bitrix_id: item.bitrix_id || '',
+        historico,
+        ordem: maxOrdem,
+        design_position: maxOrdem,
+        factory_position: maxFactoryOrdem,
+        factory_status: 'pendente_design',
+      };
+
+      const nova = await localClient.entities.Demanda.create(payload);
+      novasDemandas.push(nova);
+    }
+
+    setDemandas((prev) => [...prev, ...novasDemandas]);
+  }
+
   async function criarStatus(data) {
     const maxOrdem = statuses.reduce((m, s) => Math.max(m, s.ordem ?? 0), -1);
     const novo = await localClient.entities.Status.create({ ...data, ordem: maxOrdem + 1 });
@@ -479,11 +565,23 @@ export default function Prioridades() {
           </div>
         </div>
 
-        {can('priority_create') && (
-          <Button onClick={abrirNovo}>
-            <Plus size={16} className="mr-1" /> Nova demanda
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {can('priority_create') && (
+            <Button
+              variant="outline"
+              onClick={() => setCsvImportOpen(true)}
+              className="font-medium shadow-2xs"
+            >
+              <FileSpreadsheet size={15} className="mr-1.5 text-emerald-600" /> Importar CSV
+            </Button>
+          )}
+
+          {can('priority_create') && (
+            <Button onClick={abrirNovo} className="font-semibold shadow-xs">
+              <Plus size={16} className="mr-1.5" /> Nova demanda
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mb-4">
@@ -535,7 +633,7 @@ export default function Prioridades() {
                     designers={designers}
                     index={i}
                     onEdit={abrirEdicao}
-                    onDelete={excluirDemanda}
+                    onDelete={abrirModalExcluir}
                     onConcluir={concluirDemanda}
                     onEnviarParaImpressao={enviarParaImpressao}
                     onQuickUpdate={quickUpdateDemanda}
@@ -559,6 +657,7 @@ export default function Prioridades() {
           setEditando(null);
         }}
         onSave={salvarDemanda}
+        onDelete={abrirModalExcluir}
         demanda={editando}
         statuses={statuses}
         vendedores={vendedores}
@@ -588,6 +687,26 @@ export default function Prioridades() {
             carregar();
           }
         }}
+      />
+
+      <ImportCsvDialog
+        open={csvImportOpen}
+        onClose={() => setCsvImportOpen(false)}
+        onImport={importarCsvDemandas}
+        statuses={statuses}
+        revendas={revendas}
+        vendedores={vendedores}
+        designers={designers}
+        demandasExistentes={demandas}
+      />
+
+      <ExcluirDemandaDialog
+        open={Boolean(demandaParaExcluir)}
+        onClose={() => !excluindoDemanda && setDemandaParaExcluir(null)}
+        onConfirm={confirmarExcluirDemanda}
+        demanda={demandaParaExcluir}
+        status={demandaParaExcluir ? statusMap[demandaParaExcluir.status_id] : null}
+        loading={excluindoDemanda}
       />
     </div>
   );
