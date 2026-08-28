@@ -12,6 +12,7 @@ import {
   History,
   Camera,
   Layers,
+  Printer,
 } from 'lucide-react';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,7 @@ export default function DemandaItem({
   onEdit,
   onDelete,
   onConcluir,
+  onEnviarParaImpressao,
   onQuickUpdate,
   onRegistrarAlteracao,
   dragDisabled,
@@ -285,36 +287,33 @@ export default function DemandaItem({
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor={`rev-${demanda.id}`} className="text-xs flex items-center gap-1.5">
-              <UserAvatar name={respTemp.revenda} size="xs" /> Revenda
-            </Label>
-            {respTemp.revenda && (
-              <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition" title="Enviar logo/foto da Revenda">
-                <Camera size={12} /> Logo/Foto
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleUploadAvatarFor(respTemp.revenda, f);
-                  }}
-                />
-              </label>
-            )}
-          </div>
-          <Input
-            id={`rev-${demanda.id}`}
-            list={`rev-list-${demanda.id}`}
-            value={respTemp.revenda}
-            onChange={(e) => setRespTemp(prev => ({ ...prev, revenda: e.target.value }))}
-            placeholder="Nome da revenda"
-            className="h-8 text-xs"
-          />
-          <datalist id={`rev-list-${demanda.id}`}>
-            {revendas.map(r => <option key={r} value={r} />)}
-          </datalist>
+          <Label htmlFor={`rev-${demanda.id}`} className="text-xs flex items-center gap-1.5">
+            <UserAvatar name={respTemp.revenda} size="xs" /> Revenda
+          </Label>
+          <Select
+            value={respTemp.revenda || '__none__'}
+            onValueChange={(v) => setRespTemp((prev) => ({ ...prev, revenda: v === '__none__' ? '' : v }))}
+          >
+            <SelectTrigger id={`rev-${demanda.id}`} className="h-8 text-xs">
+              <SelectValue placeholder="Selecione a revenda" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Nenhuma revenda</SelectItem>
+              {revendas.map((r) => {
+                const val = typeof r === 'object' ? r.value || r.nome : r;
+                const lbl = typeof r === 'object' ? r.label || r.nome : r;
+                const avatar = typeof r === 'object' ? r.avatar_url : undefined;
+                return (
+                  <SelectItem key={val} value={val}>
+                    <div className="flex items-center gap-2">
+                      <UserAvatar name={lbl} src={avatar} size="xs" />
+                      <span>{lbl}</span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex justify-end gap-1.5 pt-1">
@@ -349,18 +348,29 @@ export default function DemandaItem({
     </div>
   );
 
-  // Elemento: Ações do Topo (Concluir / Editar / Excluir)
+  // Elemento: Ações do Topo (Enviar para Impressão / Concluir / Editar / Excluir)
   const acoesNode = (
-    <div className="flex items-center gap-1 shrink-0">
+    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+      {canEdit && (
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => onEnviarParaImpressao?.(demanda)}
+          className="h-7 px-2.5 text-xs font-semibold bg-foreground hover:bg-foreground/90 text-background transition shadow-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
+          title="Enviar demanda para a Fila de Impressão"
+        >
+          <Printer size={13} className="stroke-[2.5]" /> Enviar p/ Impressão
+        </Button>
+      )}
       {canEdit && (
         <Button
           variant="outline"
           size="sm"
           onClick={() => onConcluir(demanda)}
-          className="h-7 px-2.5 text-xs font-semibold bg-background hover:bg-foreground hover:text-background transition shadow-xs rounded-lg"
-          title="Concluir demanda"
+          className="h-7 px-2.5 text-xs font-medium bg-background hover:bg-muted transition shadow-xs rounded-lg"
+          title="Concluir demanda diretamente"
         >
-          <Check size={13} className="mr-1 stroke-[2.5]" /> Concluir
+          <Check size={13} className="mr-1 stroke-[2]" /> Concluir
         </Button>
       )}
       {canEdit && (
@@ -431,70 +441,9 @@ export default function DemandaItem({
     </div>
   );
 
-  // Elemento: Badges Interativos (Acabamento, Etiqueta, Prazo, Status, Fase da Arte)
+  // Elemento: Badges Interativos (Etiqueta, Prazo, Status, Fase da Arte)
   const badgesNode = (
     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-      {/* Badge de Acabamento (Interativo) */}
-      {canEdit ? (
-        <Popover open={acabamentoPopoverOpen} onOpenChange={setAcabamentoPopoverOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="cursor-pointer transition-transform hover:scale-105"
-              title="Clique para alterar o acabamento da fábrica"
-            >
-              <span
-                style={{
-                  backgroundColor: acabamentoCfg.corBg,
-                  color: acabamentoCfg.cor,
-                  borderColor: acabamentoCfg.corBorder,
-                }}
-                className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap shadow-2xs"
-              >
-                <Layers size={10} />
-                {acabamentoCfg.label}
-              </span>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-2 space-y-1" align="start">
-            <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Acabamento</div>
-            {ACABAMENTOS.map((a) => {
-              const isSelected = (demanda.acabamento || 'Autocolante') === a.id;
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => {
-                    onQuickUpdate?.(demanda, { acabamento: a.id });
-                    setAcabamentoPopoverOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition ${
-                    isSelected ? 'bg-accent font-semibold text-foreground' : 'hover:bg-muted text-muted-foreground'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: a.cor }} />
-                    {a.label}
-                  </span>
-                  {isSelected && <Check size={13} className="text-foreground" />}
-                </button>
-              );
-            })}
-          </PopoverContent>
-        </Popover>
-      ) : (
-        <span
-          style={{
-            backgroundColor: acabamentoCfg.corBg,
-            color: acabamentoCfg.cor,
-            borderColor: acabamentoCfg.corBorder,
-          }}
-          className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap shadow-2xs"
-        >
-          <Layers size={10} />
-          {acabamentoCfg.label}
-        </span>
-      )}
 
       {/* Badge de Etiqueta (Interativo) */}
       {canEdit ? (

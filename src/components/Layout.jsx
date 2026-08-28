@@ -1,6 +1,7 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { ListOrdered, Printer, CheckCircle2, Shield } from 'lucide-react';
 import UserMenu from '@/components/auth/UserMenu';
+import NotificationBell from '@/components/notifications/NotificationBell';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Layout() {
@@ -56,6 +57,8 @@ export default function Layout() {
             </nav>
 
             <div className="h-5 w-px bg-border hidden sm:block" />
+
+            <NotificationBell />
 
             <UserMenu />
           </div>

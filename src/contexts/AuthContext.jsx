@@ -55,25 +55,34 @@ export function AuthProvider({ children }) {
   });
 
   const [usuariosLista, setUsuariosLista] = useState([]);
+  const [revendasLista, setRevendasLista] = useState([]);
   const [configuracao, setConfiguracao] = useState({ seller_view_mode: 'all' });
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [carregandoAuth, setCarregandoAuth] = useState(true);
 
-  // Carregar lista de usuários e configurações
+  // Carregar lista de usuários, revendas e configurações
   const carregarUsuariosEConfig = useCallback(async () => {
     try {
-      const [users, configs] = await Promise.all([
+      const [users, revs, configs] = await Promise.all([
         localClient.entities.Usuario.list('nome', 500),
+        localClient.entities.Revenda.list('nome', 500),
         localClient.entities.Configuracao.list('id', 1),
       ]);
       const lista = users || [];
+      const listaRevs = revs || [];
       setUsuariosLista(lista);
+      setRevendasLista(listaRevs);
       syncAvatarsFromUsers(lista);
+      listaRevs.forEach((r) => {
+        if (r.logo_url && r.nome) {
+          saveAvatar(r.nome, r.logo_url);
+        }
+      });
       if (configs && configs.length > 0) {
         setConfiguracao(configs[0]);
       }
     } catch (err) {
-      console.error('[AuthContext] Erro ao carregar usuários/configurações:', err);
+      console.error('[AuthContext] Erro ao carregar usuários/revendas/configurações:', err);
     }
   }, []);
 
@@ -474,6 +483,66 @@ export function AuthProvider({ children }) {
       .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
   }, [usuariosLista]);
 
+  /**
+   * Adicionar Revenda
+   */
+  async function adicionarRevenda({ nome, logo_url = '' }) {
+    if (!can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
+      return { success: false, error: 'Sem permissão para cadastrar revendas.' };
+    }
+    try {
+      const criada = await localClient.entities.Revenda.create({
+        nome: nome.trim(),
+        logo_url,
+      });
+      if (logo_url && nome) {
+        saveAvatar(nome, logo_url);
+      }
+      await carregarUsuariosEConfig();
+      return { success: true, revenda: criada };
+    } catch (err) {
+      console.error('[AuthContext] Erro ao cadastrar revenda:', err);
+      return { success: false, error: 'Erro ao cadastrar revenda.' };
+    }
+  }
+
+  /**
+   * Atualizar Revenda
+   */
+  async function atualizarRevenda(id, patch) {
+    if (!can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
+      return { success: false, error: 'Sem permissão para editar revendas.' };
+    }
+    try {
+      const atualizada = await localClient.entities.Revenda.update(id, patch);
+      if (atualizada.logo_url && atualizada.nome) {
+        saveAvatar(atualizada.nome, atualizada.logo_url);
+      }
+      await carregarUsuariosEConfig();
+      return { success: true, revenda: atualizada };
+    } catch (err) {
+      console.error('[AuthContext] Erro ao atualizar revenda:', err);
+      return { success: false, error: 'Erro ao atualizar revenda.' };
+    }
+  }
+
+  /**
+   * Excluir Revenda
+   */
+  async function excluirRevenda(id) {
+    if (!can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
+      return { success: false, error: 'Sem permissão para excluir revendas.' };
+    }
+    try {
+      await localClient.entities.Revenda.delete(id);
+      await carregarUsuariosEConfig();
+      return { success: true };
+    } catch (err) {
+      console.error('[AuthContext] Erro ao excluir revenda:', err);
+      return { success: false, error: 'Erro ao excluir revenda.' };
+    }
+  }
+
   function logout() {
     if (isSupabaseConfigured && supabase) {
       supabase.auth.signOut().catch(() => {});
@@ -488,6 +557,7 @@ export function AuthProvider({ children }) {
       value={{
         usuario,
         usuarios: usuariosLista,
+        revendas: revendasLista,
         vendedores: vendedoresCadastrados,
         designers: designersCadastrados,
         impressores: impressoresCadastrados,
@@ -501,6 +571,9 @@ export function AuthProvider({ children }) {
         atualizarAvatar,
         desativarUsuario,
         ativarUsuario,
+        adicionarRevenda,
+        atualizarRevenda,
+        excluirRevenda,
         atualizarConfiguracao,
         recarregarUsuarios: carregarUsuariosEConfig,
         registrarAuditoria,

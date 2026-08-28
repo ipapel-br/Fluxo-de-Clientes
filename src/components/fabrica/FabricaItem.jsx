@@ -12,6 +12,7 @@ import {
   Layers,
   Printer,
   Sparkles,
+  Undo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -46,6 +47,7 @@ export default function FabricaItem({
   onIniciarImpressao,
   onConcluirImpressao,
   onPausarImpressao,
+  onDevolverParaPrioridade,
   dragDisabled,
   destaque,
   viewMode = 'lista',
@@ -68,9 +70,9 @@ export default function FabricaItem({
   const prazoClass = PRAZO_CLASSES[alerta];
   const etiquetaCfg = etiquetaConfig(demanda.etiqueta);
 
-  // Elemento: Ações rápidas de Produção (Iniciar / Pausar / Concluir)
+  // Elemento: Ações rápidas de Produção (Iniciar / Pausar / Concluir / Retornar)
   const acoesFabricaNode = (
-    <div className="flex items-center gap-1.5 shrink-0">
+    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
       {demanda.factory_status === 'em_impressao' ? (
         <>
           {canComplete && (
@@ -79,7 +81,7 @@ export default function FabricaItem({
               size="sm"
               onClick={() => onConcluirImpressao(demanda)}
               className="h-7 px-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs rounded-lg transition"
-              title="Concluir impressão"
+              title="Concluir impressão e enviar para concluídos"
             >
               <CheckCircle2 size={13} className="mr-1 stroke-[2.5]" /> Concluir
             </Button>
@@ -109,9 +111,20 @@ export default function FabricaItem({
             className="h-7 px-2.5 text-xs font-semibold bg-background hover:bg-foreground hover:text-background transition shadow-xs rounded-lg"
             title="Iniciar impressão deste pedido"
           >
-            <Play size={12} className="mr-1 fill-current" /> Iniciar Impressão
+            <Play size={12} className="mr-1 fill-current" /> Iniciar
           </Button>
         )
+      )}
+      {canEdit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDevolverParaPrioridade?.(demanda)}
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+          title="Retornar para a fila de Prioridade (Design)"
+        >
+          <Undo2 size={12} className="mr-1" /> Devolver p/ Prioridade
+        </Button>
       )}
     </div>
   );

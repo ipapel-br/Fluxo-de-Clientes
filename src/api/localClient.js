@@ -58,12 +58,18 @@ const defaultConfiguracao = () => [
   { id: 'config_geral', seller_view_mode: 'all', updated_at: now() },
 ];
 
+const defaultRevendas = () => [
+  { id: 'revenda_ipapel', nome: 'iPapel', logo_url: '' },
+];
+
 const initialState = () => ({
   demandas: [],
   statuses: defaultStatuses(),
   usuarios: defaultUsuarios(),
+  revendas: defaultRevendas(),
   audit_logs: [],
   configuracoes: defaultConfiguracao(),
+  notificacoes: [],
 });
 
 function normalizeState(value) {
@@ -114,13 +120,25 @@ function normalizeState(value) {
   const configuracoes = Array.isArray(value?.configuracoes)
     ? value.configuracoes
     : defaultConfiguracao();
+  const revendas = Array.isArray(value?.revendas)
+    ? value.revendas
+    : Array.isArray(value?.data?.Revenda)
+      ? value.data.Revenda
+      : defaultRevendas();
+  const notificacoes = Array.isArray(value?.notificacoes)
+    ? value.notificacoes
+    : Array.isArray(value?.data?.Notificacao)
+      ? value.data.Notificacao
+      : [];
 
   return {
     demandas: clone(demandas),
     statuses: statuses.length > 0 ? clone(statuses) : defaultStatuses(),
     usuarios: usuarios.length > 0 ? clone(usuarios) : defaultUsuarios(),
+    revendas: revendas.length > 0 ? clone(revendas) : defaultRevendas(),
     audit_logs: clone(audit_logs),
     configuracoes: clone(configuracoes),
+    notificacoes: clone(notificacoes),
   };
 }
 
@@ -174,6 +192,8 @@ const COLLECTION_MAP = {
   Status: 'statuses',
   AuditLog: 'audit_logs',
   Configuracao: 'configuracoes',
+  Revenda: 'revendas',
+  Notificacao: 'notificacoes',
 };
 
 function createLocalStorageEntityApi(entityName) {
@@ -277,6 +297,9 @@ export const localClient = {
     Configuracao: isSupabaseConfigured
       ? createSupabaseEntityApi('Configuracao')
       : createLocalStorageEntityApi('Configuracao'),
+    Revenda: isSupabaseConfigured
+      ? createSupabaseEntityApi('Revenda')
+      : createLocalStorageEntityApi('Revenda'),
   },
 };
 

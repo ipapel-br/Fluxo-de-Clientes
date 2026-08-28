@@ -272,18 +272,30 @@ export default function DemandaForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="revenda">Revenda</Label>
-                <Input
-                  id="revenda"
-                  list="revendas-list"
-                  value={form.revenda}
-                  onChange={(e) => set('revenda', e.target.value)}
-                  placeholder="Revenda relacionada"
-                />
-                <datalist id="revendas-list">
-                  {revendas.map((r) => (
-                    <option key={r} value={r} />
-                  ))}
-                </datalist>
+                <Select
+                  value={form.revenda || '__none__'}
+                  onValueChange={(v) => set('revenda', v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger id="revenda" className="h-10 text-sm">
+                    <SelectValue placeholder="Selecione a revenda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nenhuma revenda</SelectItem>
+                    {revendas.map((r) => {
+                      const val = typeof r === 'object' ? r.value || r.nome : r;
+                      const lbl = typeof r === 'object' ? r.label || r.nome : r;
+                      const avatar = typeof r === 'object' ? r.avatar_url : undefined;
+                      return (
+                        <SelectItem key={val} value={val}>
+                          <div className="flex items-center gap-2">
+                            <UserAvatar name={lbl} src={avatar} size="xs" />
+                            <span>{lbl}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="vendedor">Vendedor</Label>

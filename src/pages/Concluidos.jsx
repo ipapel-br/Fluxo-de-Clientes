@@ -20,6 +20,7 @@ import { acabamentoConfig } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { entradaReabertura, formatarDataHistorico } from '@/lib/historico';
+import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
 
 export default function Concluidos() {
   const { usuario, can } = useAuth();
@@ -96,6 +97,15 @@ export default function Concluidos() {
       completed_at: null,
       completed_by: null,
       historico,
+    });
+
+    emitirNotificacao({
+      demanda: { ...d, status_id: naoConcluido.id },
+      autor: usuario,
+      tipo: NOTIFICATION_TYPES.REABERTURA,
+      titulo: 'Demanda reaberta',
+      mensagem: `${usuario?.nome || 'Alguém'} reabriu a demanda de "${d.cliente}" para a fila de prioridades.`,
+      link_path: '/',
     });
 
     setDemandas((prev) => prev.filter((x) => x.id !== d.id));

@@ -19,6 +19,7 @@ import {
   entradaConclusao,
   entradaReordenacaoPrioridade,
 } from '@/lib/historico';
+import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
 
 export default function Prioridades() {
   const {
@@ -27,6 +28,7 @@ export default function Prioridades() {
     configuracao,
     designers: designersCadastrados,
     vendedores: vendedoresCadastrados,
+    revendas: revendasCadastradas,
   } = useAuth();
   const [demandas, setDemandas] = useState([]);
   const [statuses, setStatuses] = useState([]);
@@ -74,11 +76,13 @@ export default function Prioridades() {
     [statuses]
   );
 
-  // Demandas ativas na fila de prioridade
+  // Demandas ativas na fila de prioridade (exclui demandas já enviadas para impressão ou concluídas)
   const ativas = useMemo(() => {
     let list = demandas.filter((d) => {
       const st = statusMap[d.status_id];
-      return !st || !st.concluido;
+      const estaConcluido = Boolean(st?.concluido || d.completed_at);
+      const estaEmImpressao = d.factory_status === 'em_impressao' || d.factory_status === 'na_fila';
+      return !estaConcluido && !estaEmImpressao;
     });
 
     // Se o sistema estiver configurado no Modo 2 (Vendedor vê apenas suas demandas)
@@ -146,10 +150,21 @@ export default function Prioridades() {
     }));
   }, [vendedoresCadastrados, demandas]);
 
-  const revendas = useMemo(
-    () => [...new Set(demandas.map((d) => d.revenda).filter(Boolean))].sort(),
-    [demandas]
-  );
+  const revendas = useMemo(() => {
+    if (revendasCadastradas && revendasCadastradas.length > 0) {
+      return revendasCadastradas.map((r) => ({
+        id: r.id,
+        value: r.nome,
+        label: r.nome,
+        avatar_url: r.logo_url,
+      }));
+    }
+    return [...new Set(demandas.map((d) => d.revenda).filter(Boolean))].sort().map((nome) => ({
+      id: nome,
+      value: nome,
+      label: nome,
+    }));
+  }, [revendasCadastradas, demandas]);
 
   async function onDragEnd(result) {
     if (!result.destination || result.source.index === result.destination.index) return;
@@ -190,6 +205,40 @@ export default function Prioridades() {
       const historico = [...entradas, ...(editando.historico || [])];
       const atualizada = await localClient.entities.Demanda.update(editando.id, { ...data, historico });
       setDemandas((prev) => prev.map((d) => (d.id === atualizada.id ? { ...d, ...data, ...atualizada } : d)));
+
+      // Notificar se designer ou vendedor foram atribuídos ou alterados
+      if ((editando.designer || '') !== (data.designer || '') && data.designer) {
+        emitirNotificacao({
+          demanda: { ...editando, ...data },
+          autor: usuario,
+          tipo: NOTIFICATION_TYPES.ATRIBUICAO,
+          titulo: 'Você foi atribuído a uma demanda',
+          mensagem: `${usuario?.nome || 'Alguém'} atribuiu a demanda de "${data.cliente}" para você como Designer.`,
+          link_path: '/',
+        });
+      }
+      if ((editando.vendedor || '') !== (data.vendedor || '') && data.vendedor) {
+        emitirNotificacao({
+          demanda: { ...editando, ...data },
+          autor: usuario,
+          tipo: NOTIFICATION_TYPES.ATRIBUICAO,
+          titulo: 'Demanda vinculada a você',
+          mensagem: `${usuario?.nome || 'Alguém'} definiu você como Vendedor da demanda de "${data.cliente}".`,
+          link_path: '/',
+        });
+      }
+      // Notificar se houve mudança no briefing/etapa da demanda
+      if ((editando.demanda || '') !== (data.demanda || '') && data.demanda) {
+        emitirNotificacao({
+          demanda: { ...editando, ...data },
+          autor: usuario,
+          tipo: NOTIFICATION_TYPES.ALTERACAO,
+          titulo: 'Alteração na demanda',
+          mensagem: `${usuario?.nome || 'Alguém'} alterou o briefing/etapa de "${data.cliente}": ${data.demanda}`,
+          link_path: '/',
+        });
+      }
+
       setEditando(null);
     } else {
       const historico = [
@@ -209,6 +258,16 @@ export default function Prioridades() {
         factory_status: 'aguardando',
       });
       setDemandas((prev) => [...prev, nova]);
+
+      // Notificar responsáveis da nova demanda criada
+      emitirNotificacao({
+        demanda: nova,
+        autor: usuario,
+        tipo: NOTIFICATION_TYPES.ATRIBUICAO,
+        titulo: 'Nova demanda cadastrada',
+        mensagem: `${usuario?.nome || 'Alguém'} criou a demanda para "${nova.cliente}" (${nova.demanda || 'Sem descrição'}).`,
+        link_path: '/',
+      });
     }
     setFormOpen(false);
   }
@@ -238,6 +297,50 @@ export default function Prioridades() {
       historico,
     });
     setDemandas((prev) => prev.map((d) => (d.id === atualizada.id ? { ...d, ...atualizada } : d)));
+
+    // Emitir notificação de conclusão
+    emitirNotificacao({
+      demanda: atualizada,
+      autor: usuario,
+      tipo: NOTIFICATION_TYPES.CONCLUSAO,
+      titulo: 'Demanda concluída',
+      mensagem: `${usuario?.nome || 'Alguém'} marcou a demanda de "${demanda.cliente}" como Concluída.`,
+      link_path: '/concluidos',
+    });
+  }
+
+  async function enviarParaImpressao(demanda) {
+    const entradaImp = {
+      tipo: 'IMPRESSAO_ENVIO',
+      data: new Date().toISOString(),
+      autor: usuario?.nome || 'Usuário',
+      descricao: `${usuario?.nome || 'Usuário'} enviou para a Fila de Impressão`,
+    };
+    const historico = [entradaImp, ...(demanda.historico || [])];
+    const patch = {
+      factory_status: 'em_impressao',
+      fase_arte: 'Arte aprovada',
+      historico,
+    };
+
+    setDemandas((prev) => prev.map((d) => (d.id === demanda.id ? { ...d, ...patch } : d)));
+
+    try {
+      const atualizada = await localClient.entities.Demanda.update(demanda.id, patch);
+
+      // Notificar envio para impressão
+      emitirNotificacao({
+        demanda: { ...demanda, ...patch },
+        autor: usuario,
+        tipo: NOTIFICATION_TYPES.IMPRESSAO,
+        titulo: 'Arte enviada para Impressão',
+        mensagem: `${usuario?.nome || 'Designer'} enviou a demanda de "${demanda.cliente}" para a fila de impressão.`,
+        link_path: '/impressao',
+      });
+    } catch (err) {
+      console.error('Erro ao enviar para impressão:', err);
+      carregar();
+    }
   }
 
   async function registrarAlteracao(demanda, novoTexto) {
@@ -248,6 +351,16 @@ export default function Prioridades() {
       historico,
     });
     setDemandas((prev) => prev.map((d) => (d.id === atualizada.id ? { ...d, ...atualizada } : d)));
+
+    // Disparar notificação de nova alteração registrada (ex: "Vendedora Grace registrou alteração")
+    emitirNotificacao({
+      demanda: atualizada,
+      autor: usuario,
+      tipo: NOTIFICATION_TYPES.ALTERACAO,
+      titulo: 'Nova alteração registrada',
+      mensagem: `${usuario?.nome || 'Colaborador'} registrou uma alteração em "${demanda.cliente}": ${novoTexto}`,
+      link_path: '/',
+    });
   }
 
   async function quickUpdateDemanda(demanda, patch) {
@@ -259,6 +372,47 @@ export default function Prioridades() {
     try {
       const atualizada = await localClient.entities.Demanda.update(demanda.id, { ...patch, historico });
       setDemandas((prev) => prev.map((d) => (d.id === atualizada.id ? { ...d, ...updatedData, ...atualizada } : d)));
+
+      // Notificar sobre mudanças pontuais relevantes
+      if (patch.fase_arte && patch.fase_arte !== demanda.fase_arte) {
+        const faseNomes = { iniciando: 'Iniciando arte', no_meio: 'No meio da arte', finalizando: 'Finalizando arte' };
+        emitirNotificacao({
+          demanda: { ...demanda, ...patch },
+          autor: usuario,
+          tipo: NOTIFICATION_TYPES.FASE_ARTE,
+          titulo: 'Fase da arte atualizada',
+          mensagem: `${usuario?.nome || 'Designer'} alterou o progresso da arte de "${demanda.cliente}" para "${faseNomes[patch.fase_arte] || patch.fase_arte}".`,
+          link_path: '/',
+        });
+      } else if (patch.status_id && patch.status_id !== demanda.status_id) {
+        const nomeStatus = statusMap[patch.status_id]?.nome || 'Novo Status';
+        emitirNotificacao({
+          demanda: { ...demanda, ...patch },
+          autor: usuario,
+          tipo: NOTIFICATION_TYPES.STATUS,
+          titulo: 'Status alterado',
+          mensagem: `${usuario?.nome || 'Alguém'} alterou o status de "${demanda.cliente}" para "${nomeStatus}".`,
+          link_path: '/',
+        });
+      } else if (patch.designer && patch.designer !== demanda.designer) {
+        emitirNotificacao({
+          demanda: { ...demanda, ...patch },
+          autor: usuario,
+          tipo: NOTIFICATION_TYPES.ATRIBUICAO,
+          titulo: 'Você foi atribuído como Designer',
+          mensagem: `${usuario?.nome || 'Alguém'} definiu você como Designer de "${demanda.cliente}".`,
+          link_path: '/',
+        });
+      } else if (patch.vendedor && patch.vendedor !== demanda.vendedor) {
+        emitirNotificacao({
+          demanda: { ...demanda, ...patch },
+          autor: usuario,
+          tipo: NOTIFICATION_TYPES.ATRIBUICAO,
+          titulo: 'Você foi atribuído como Vendedor',
+          mensagem: `${usuario?.nome || 'Alguém'} definiu você como Vendedor de "${demanda.cliente}".`,
+          link_path: '/',
+        });
+      }
     } catch (err) {
       console.error('Erro ao atualizar demanda rapidamente:', err);
       carregar();
@@ -383,6 +537,7 @@ export default function Prioridades() {
                     onEdit={abrirEdicao}
                     onDelete={excluirDemanda}
                     onConcluir={concluirDemanda}
+                    onEnviarParaImpressao={enviarParaImpressao}
                     onQuickUpdate={quickUpdateDemanda}
                     onRegistrarAlteracao={registrarAlteracao}
                     dragDisabled={filtrando || !can('priority_reorder')}

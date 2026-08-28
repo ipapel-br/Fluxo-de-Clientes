@@ -13,6 +13,7 @@ import {
   entradaConclusaoImpressao,
   entradaStatusFabrica,
 } from '@/lib/historico';
+import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
 
 export default function Fabrica() {
   const { usuario, can, vendedores: vendedoresCadastrados } = useAuth();
@@ -65,12 +66,14 @@ export default function Fabrica() {
     [statuses]
   );
 
-  // Demandas ativas para a fábrica (não concluídas ou em processo de fábrica)
+  // Demandas ativas para a fábrica (apenas demandas enviadas para impressão e não concluídas)
   const ativasFabrica = useMemo(() => {
     return demandas
       .filter((d) => {
         const st = statusMap[d.status_id];
-        return !st || !st.concluido;
+        const estaConcluido = Boolean(st?.concluido || d.completed_at);
+        const estaEmImpressao = d.factory_status === 'em_impressao' || d.factory_status === 'na_fila' || d.factory_status === 'pausado';
+        return !estaConcluido && estaEmImpressao;
       })
       .map((d, index) => ({
         ...d,
@@ -150,24 +153,21 @@ export default function Fabrica() {
     try {
       await localClient.entities.Demanda.bulkUpdate(novos);
     } catch (err) {
-      console.error('[Fabrica] Erro ao salvar ordem de impressão:', err);
+      console.error('Erro ao reordenar fábrica:', err);
       carregar();
     }
   }
 
   // Atualização rápida de campos no card da fábrica
   async function quickUpdateDemanda(demanda, patch) {
-    const entradas = gerarEntradasEdicao(demanda, { ...demanda, ...patch }, statusMap, usuario);
-    const historico = entradas.length > 0 ? [...entradas, ...(demanda.historico || [])] : (demanda.historico || []);
-    const updatedData = { ...demanda, ...patch, historico };
-
+    const updatedData = { ...demanda, ...patch };
     setDemandas((prev) => prev.map((d) => (d.id === demanda.id ? updatedData : d)));
 
     try {
-      const atualizada = await localClient.entities.Demanda.update(demanda.id, { ...patch, historico });
+      const atualizada = await localClient.entities.Demanda.update(demanda.id, patch);
       setDemandas((prev) => prev.map((d) => (d.id === atualizada.id ? { ...d, ...updatedData, ...atualizada } : d)));
     } catch (err) {
-      console.error('[Fabrica] Erro ao atualizar demanda:', err);
+      console.error('Erro ao atualizar demanda na fábrica:', err);
       carregar();
     }
   }
@@ -176,30 +176,80 @@ export default function Fabrica() {
   async function registrarAlteracao(demanda, novoTexto) {
     const entrada = entradaSituacao(novoTexto, usuario);
     const historico = [entrada, ...(demanda.historico || [])];
-    const atualizada = await localClient.entities.Demanda.update(demanda.id, {
-      demanda: novoTexto,
-      historico,
-    });
-    setDemandas((prev) => prev.map((d) => (d.id === atualizada.id ? { ...d, ...atualizada } : d)));
+    await quickUpdateDemanda(demanda, { demanda: novoTexto, historico });
   }
 
   // Ações de fluxo da fábrica
   async function iniciarImpressao(demanda) {
-    const entrada = entradaInicioImpressao(usuario);
+    const entrada = entradaStatusFabrica(demanda.factory_status, 'em_impressao', usuario);
     const historico = [entrada, ...(demanda.historico || [])];
     await quickUpdateDemanda(demanda, { factory_status: 'em_impressao', historico });
+
+    emitirNotificacao({
+      demanda: { ...demanda, factory_status: 'em_impressao' },
+      autor: usuario,
+      tipo: NOTIFICATION_TYPES.IMPRESSAO,
+      titulo: 'Impressão iniciada',
+      mensagem: `${usuario?.nome || 'Impressor'} iniciou a impressão de "${demanda.cliente}".`,
+      link_path: '/impressao',
+    });
   }
 
   async function pausarImpressao(demanda) {
     const entrada = entradaStatusFabrica(demanda.factory_status, 'pausado', usuario);
     const historico = [entrada, ...(demanda.historico || [])];
     await quickUpdateDemanda(demanda, { factory_status: 'pausado', historico });
+
+    emitirNotificacao({
+      demanda: { ...demanda, factory_status: 'pausado' },
+      autor: usuario,
+      tipo: NOTIFICATION_TYPES.IMPRESSAO,
+      titulo: 'Impressão pausada',
+      mensagem: `${usuario?.nome || 'Impressor'} pausou a impressão de "${demanda.cliente}".`,
+      link_path: '/impressao',
+    });
+  }
+
+  async function devolverParaPrioridade(demanda) {
+    const entrada = {
+      tipo: 'STATUS_CHANGE',
+      data: new Date().toISOString(),
+      autor: usuario?.nome || 'Impressor',
+      descricao: `${usuario?.nome || 'Impressor'} devolveu a demanda para a fila de Prioridade`,
+    };
+    const historico = [entrada, ...(demanda.historico || [])];
+    const patch = { factory_status: 'aguardando', historico };
+    setDemandas((prev) => prev.map((d) => (d.id === demanda.id ? { ...d, ...patch } : d)));
+    try {
+      await localClient.entities.Demanda.update(demanda.id, patch);
+    } catch (err) {
+      console.error('[Fabrica] Erro ao devolver para prioridade:', err);
+      carregar();
+    }
   }
 
   async function concluirImpressao(demanda) {
+    const concluidoStatus = statuses.find((s) => s.concluido);
     const entrada = entradaConclusaoImpressao(usuario);
     const historico = [entrada, ...(demanda.historico || [])];
-    await quickUpdateDemanda(demanda, { factory_status: 'impresso', historico });
+    const agora = new Date().toISOString();
+
+    const patch = {
+      factory_status: 'impresso',
+      completed_at: agora,
+      completed_by: usuario?.nome || 'Impressor',
+      status_id: concluidoStatus ? concluidoStatus.id : demanda.status_id,
+      historico,
+    };
+
+    setDemandas((prev) => prev.map((d) => (d.id === demanda.id ? { ...d, ...patch } : d)));
+
+    try {
+      await localClient.entities.Demanda.update(demanda.id, patch);
+    } catch (err) {
+      console.error('[Fabrica] Erro ao concluir impressão:', err);
+      carregar();
+    }
   }
 
   if (!can('factory_view')) {
@@ -302,6 +352,7 @@ export default function Fabrica() {
                     onIniciarImpressao={iniciarImpressao}
                     onConcluirImpressao={concluirImpressao}
                     onPausarImpressao={pausarImpressao}
+                    onDevolverParaPrioridade={devolverParaPrioridade}
                     dragDisabled={filtrando || !can('factory_reorder')}
                     destaque={i === 0 && !filtrando}
                     viewMode={viewMode}

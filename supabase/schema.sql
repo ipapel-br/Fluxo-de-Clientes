@@ -97,7 +97,26 @@ INSERT INTO public.configuracoes (id, seller_view_mode)
 VALUES ('config_geral', 'all')
 ON CONFLICT (id) DO NOTHING;
 
--- 6. Índices para performance
+-- 6. Tabela de Notificações
+CREATE TABLE IF NOT EXISTS public.notificacoes (
+    id TEXT PRIMARY KEY DEFAULT ('notif_' || substr(md5(random()::text), 1, 8)),
+    demanda_id TEXT,
+    cliente_nome TEXT,
+    actor_id TEXT,
+    actor_name TEXT NOT NULL,
+    actor_email TEXT,
+    actor_avatar TEXT,
+    tipo TEXT NOT NULL DEFAULT 'alteracao',
+    titulo TEXT NOT NULL,
+    mensagem TEXT NOT NULL,
+    target_users JSONB NOT NULL DEFAULT '[]'::jsonb,
+    target_roles JSONB NOT NULL DEFAULT '["admin"]'::jsonb,
+    read_by JSONB NOT NULL DEFAULT '[]'::jsonb,
+    link_path TEXT DEFAULT '/',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 7. Índices para performance
 CREATE INDEX IF NOT EXISTS idx_demandas_status_id ON public.demandas(status_id);
 CREATE INDEX IF NOT EXISTS idx_demandas_ordem ON public.demandas(ordem);
 CREATE INDEX IF NOT EXISTS idx_demandas_design_position ON public.demandas(design_position);
@@ -108,15 +127,17 @@ CREATE INDEX IF NOT EXISTS idx_statuses_ordem ON public.statuses(ordem);
 CREATE INDEX IF NOT EXISTS idx_usuarios_email ON public.usuarios(email);
 CREATE INDEX IF NOT EXISTS idx_usuarios_role ON public.usuarios(role);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notificacoes_created_at ON public.notificacoes(created_at DESC);
 
--- 7. Habilitação de Row Level Security (RLS)
+-- 8. Habilitação de Row Level Security (RLS)
 ALTER TABLE public.statuses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.demandas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notificacoes ENABLE ROW LEVEL SECURITY;
 
--- 8. Políticas de acesso
+-- 9. Políticas de acesso
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'statuses' AND policyname = 'Permitir acesso completo a statuses') THEN
@@ -137,6 +158,10 @@ BEGIN
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'configuracoes' AND policyname = 'Permitir acesso completo a configuracoes') THEN
         CREATE POLICY "Permitir acesso completo a configuracoes" ON public.configuracoes FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notificacoes' AND policyname = 'Permitir acesso completo a notificacoes') THEN
+        CREATE POLICY "Permitir acesso completo a notificacoes" ON public.notificacoes FOR ALL USING (true) WITH CHECK (true);
     END IF;
 END $$;
 

@@ -99,6 +99,7 @@ const TABLE_MAP = {
   Status: 'statuses',
   AuditLog: 'audit_logs',
   Configuracao: 'configuracoes',
+  Notificacao: 'notificacoes',
 };
 
 export function createSupabaseEntityApi(entityName) {

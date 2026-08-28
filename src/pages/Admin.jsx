@@ -16,6 +16,10 @@ import {
   Clock,
   Mail,
   User as UserIcon,
+  Building2,
+  Trash2,
+  Plus,
+  Camera,
 } from 'lucide-react';
 import { localClient } from '@/api/localClient';
 import { Button } from '@/components/ui/button';
@@ -46,6 +50,7 @@ import {
 import UserAvatar from '@/components/ui/UserAvatar';
 import AcessoNegado from '@/components/auth/AcessoNegado';
 import { useAuth } from '@/contexts/AuthContext';
+import { processAvatarFile, saveAvatar } from '@/lib/avatarService';
 import {
   PERFIS,
   PERFIS_LABELS,
@@ -67,9 +72,13 @@ export default function Admin() {
     usuario,
     can,
     usuarios,
+    revendas = [],
     recarregarUsuarios,
     adicionarUsuario,
     atualizarUsuario,
+    adicionarRevenda,
+    atualizarRevenda,
+    excluirRevenda,
     configuracao,
     atualizarConfiguracao,
   } = useAuth();
@@ -98,6 +107,14 @@ export default function Admin() {
   const [editPermissoes, setEditPermissoes] = useState({});
   const [salvandoEdit, setSalvandoEdit] = useState(false);
   const [erroEdit, setErroEdit] = useState('');
+
+  // Form de Revenda
+  const [modalRevendaOpen, setModalRevendaOpen] = useState(false);
+  const [revendaEditando, setRevendaEditando] = useState(null);
+  const [nomeRevenda, setNomeRevenda] = useState('');
+  const [logoRevenda, setLogoRevenda] = useState('');
+  const [salvandoRevenda, setSalvandoRevenda] = useState(false);
+  const [erroRevenda, setErroRevenda] = useState('');
 
   // Carregar logs de auditoria
   const carregarAuditLogs = useCallback(async () => {
@@ -255,6 +272,79 @@ export default function Admin() {
     }
   }
 
+  // Handlers para Revendas
+  function abrirNovaRevenda() {
+    setRevendaEditando(null);
+    setNomeRevenda('');
+    setLogoRevenda('');
+    setErroRevenda('');
+    setModalRevendaOpen(true);
+  }
+
+  function abrirEditarRevenda(rev) {
+    setRevendaEditando(rev);
+    setNomeRevenda(rev.nome || '');
+    setLogoRevenda(rev.logo_url || '');
+    setErroRevenda('');
+    setModalRevendaOpen(true);
+  }
+
+  async function handleSalvarRevenda(e) {
+    e?.preventDefault?.();
+    if (!nomeRevenda.trim()) {
+      setErroRevenda('Informe o nome da revenda.');
+      return;
+    }
+    setSalvandoRevenda(true);
+    setErroRevenda('');
+    try {
+      if (revendaEditando?.id) {
+        const res = await atualizarRevenda(revendaEditando.id, {
+          nome: nomeRevenda.trim(),
+          logo_url: logoRevenda,
+        });
+        if (!res.success) {
+          setErroRevenda(res.error || 'Erro ao atualizar revenda.');
+          return;
+        }
+      } else {
+        const res = await adicionarRevenda({
+          nome: nomeRevenda.trim(),
+          logo_url: logoRevenda,
+        });
+        if (!res.success) {
+          setErroRevenda(res.error || 'Erro ao cadastrar revenda.');
+          return;
+        }
+      }
+      setModalRevendaOpen(false);
+      setRevendaEditando(null);
+    } catch (err) {
+      console.error('[Admin] Erro ao salvar revenda:', err);
+      setErroRevenda('Erro inesperado.');
+    } finally {
+      setSalvandoRevenda(false);
+    }
+  }
+
+  async function handleExcluirRevenda(rev) {
+    if (!window.confirm(`Deseja realmente remover a revenda "${rev.nome}"?`)) return;
+    const res = await excluirRevenda(rev.id);
+    if (!res.success) {
+      window.alert(res.error || 'Não foi possível remover a revenda.');
+    }
+  }
+
+  async function handleUploadLogoRevenda(rev, file) {
+    if (!file) return;
+    try {
+      const b64 = await processAvatarFile(file);
+      await atualizarRevenda(rev.id, { logo_url: b64 });
+    } catch (err) {
+      console.error('[Admin] Erro ao processar logo da revenda:', err);
+    }
+  }
+
   if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN) {
     return <AcessoNegado mensagem="Esta área é de acesso exclusivo para administradores do sistema." />;
   }
@@ -271,7 +361,7 @@ export default function Admin() {
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Administração</h1>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Controle de usuários, perfis, permissões granulares e auditoria do sistema.
+            Controle de usuários, revendas cadastradas, permissões granulares e auditoria do sistema.
           </p>
         </div>
 
@@ -280,13 +370,21 @@ export default function Admin() {
             <UserPlus size={16} className="mr-1.5" /> Adicionar usuário
           </Button>
         )}
+        {abaAtiva === 'revendas' && (
+          <Button onClick={abrirNovaRevenda} className="font-semibold shadow-xs">
+            <Plus size={16} className="mr-1.5" /> Adicionar revenda
+          </Button>
+        )}
       </div>
 
       {/* Abas da Administração */}
       <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="space-y-4">
-        <TabsList className="grid grid-cols-3 max-w-md">
+        <TabsList className="grid grid-cols-4 max-w-xl">
           <TabsTrigger value="usuarios" className="flex items-center gap-1.5">
             <Users size={14} /> Usuários ({usuarios.length})
+          </TabsTrigger>
+          <TabsTrigger value="revendas" className="flex items-center gap-1.5">
+            <Building2 size={14} /> Revendas ({revendas.length})
           </TabsTrigger>
           <TabsTrigger value="configuracoes" className="flex items-center gap-1.5">
             <Settings size={14} /> Configurações
@@ -393,6 +491,91 @@ export default function Admin() {
                         </tr>
                       );
                     })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ABA: REVENDAS */}
+        <TabsContent value="revendas" className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              Cadastre as revendas parceiras para associar às demandas com logomarcas visíveis em todo o sistema.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/50 text-xs font-semibold text-muted-foreground border-b border-border uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Revenda</th>
+                    <th className="py-3 px-4">Logomarca / Foto</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {revendas.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="py-10 text-center text-muted-foreground">
+                        Nenhuma revenda cadastrada ainda. Clique em "Adicionar revenda" para começar.
+                      </td>
+                    </tr>
+                  ) : (
+                    revendas.map((r) => (
+                      <tr key={r.id || r.nome} className="hover:bg-muted/30 transition">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <UserAvatar name={r.nome} src={r.logo_url} size="md" />
+                            <div>
+                              <div className="font-bold text-foreground text-sm">{r.nome}</div>
+                              <div className="text-xs text-muted-foreground">ID: {r.id || 'local'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <label
+                            className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-border rounded-lg bg-background hover:bg-muted transition text-foreground"
+                            title="Trocar logotipo da revenda"
+                          >
+                            <Camera size={13} className="text-muted-foreground" />
+                            <span>{r.logo_url ? 'Alterar Logo' : 'Enviar Logo'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleUploadLogoRevenda(r, f);
+                              }}
+                            />
+                          </label>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => abrirEditarRevenda(r)}
+                              className="h-8 px-2 text-xs font-semibold shadow-2xs"
+                            >
+                              <Pencil size={13} className="mr-1" /> Editar
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleExcluirRevenda(r)}
+                              className="h-8 px-2 text-xs font-medium text-destructive hover:bg-destructive/10"
+                              title="Remover revenda"
+                            >
+                              <Trash2 size={13} className="mr-1" /> Excluir
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -733,6 +916,86 @@ export default function Admin() {
               {salvandoEdit ? 'Salvando...' : 'Salvar Alterações'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: ADICIONAR / EDITAR REVENDA */}
+      <Dialog open={modalRevendaOpen} onOpenChange={setModalRevendaOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 size={18} /> {revendaEditando ? 'Editar Revenda' : 'Adicionar Nova Revenda'}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Informe o nome e a logomarca da revenda para associar às demandas.
+            </DialogDescription>
+          </DialogHeader>
+
+          {erroRevenda && (
+            <div className="p-3 text-xs rounded-lg bg-destructive/10 text-destructive font-medium border border-destructive/20 flex items-center gap-2">
+              <AlertTriangle size={14} className="shrink-0" />
+              <span>{erroRevenda}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSalvarRevenda} className="space-y-4 py-2">
+            <div className="flex items-center gap-4">
+              <UserAvatar name={nomeRevenda || 'Revenda'} src={logoRevenda} size="lg" />
+              <div>
+                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border rounded-lg bg-muted/60 hover:bg-muted transition text-foreground">
+                  <Camera size={14} /> {logoRevenda ? 'Trocar Logotipo' : 'Carregar Logotipo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        try {
+                          const b64 = await processAvatarFile(f);
+                          setLogoRevenda(b64);
+                        } catch (err) {
+                          console.error('Erro ao processar imagem:', err);
+                        }
+                      }
+                    }}
+                  />
+                </label>
+                {logoRevenda && (
+                  <button
+                    type="button"
+                    onClick={() => setLogoRevenda('')}
+                    className="block text-[11px] text-destructive hover:underline mt-1"
+                  >
+                    Remover foto
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="nome-revenda" className="text-xs font-semibold flex items-center gap-1.5">
+                <Building2 size={13} /> Nome da Revenda *
+              </Label>
+              <Input
+                id="nome-revenda"
+                value={nomeRevenda}
+                onChange={(e) => setNomeRevenda(e.target.value)}
+                placeholder="Ex.: Alfa Decorações"
+                required
+                autoFocus
+              />
+            </div>
+
+            <DialogFooter className="pt-3">
+              <Button type="button" variant="outline" onClick={() => setModalRevendaOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={salvandoRevenda || !nomeRevenda.trim()}>
+                {salvandoRevenda ? 'Salvando...' : revendaEditando ? 'Salvar Alterações' : 'Cadastrar Revenda'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
