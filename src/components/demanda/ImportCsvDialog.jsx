@@ -253,7 +253,7 @@ export default function ImportCsvDialog({
                   <thead className="bg-muted/50 text-muted-foreground border-b border-border sticky top-0 uppercase tracking-wider text-[11px] font-semibold">
                     <tr>
                       <th className="py-2.5 px-3 w-8"></th>
-                      <th className="py-2.5 px-3 min-w-[180px]">Cliente</th>
+                      <th className="py-2.5 px-3 min-w-[240px]">Cliente</th>
                       <th className="py-2.5 px-3 min-w-[200px]">Etapa / O que precisa</th>
                       <th className="py-2.5 px-3 min-w-[170px]">Vendedor</th>
                       <th className="py-2.5 px-3 min-w-[130px]">Designer</th>
@@ -279,17 +279,22 @@ export default function ImportCsvDialog({
                               onClick={(e) => e.stopPropagation()}
                             />
                           </td>
-                          <td className="py-2.5 px-3 font-semibold text-foreground">
-                            <div className="flex items-center gap-1.5">
-                              <span>{it.cliente}</span>
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-foreground" title={it.cliente}>
+                                {it.cliente}
+                              </span>
                               {it.jaExiste && (
-                                <Badge variant="outline" className="text-[10px] py-0 px-1 text-amber-600 border-amber-300">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] py-0.5 px-1.5 font-medium whitespace-nowrap shrink-0 text-amber-600 border-amber-400/50 bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/40"
+                                >
                                   Já no fluxo
                                 </Badge>
                               )}
                             </div>
                             {it.revenda && (
-                              <div className="text-[10px] text-muted-foreground font-normal">
+                              <div className="text-[10px] text-muted-foreground font-normal mt-0.5">
                                 Revenda: {it.revenda}
                               </div>
                             )}
