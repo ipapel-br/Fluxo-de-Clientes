@@ -348,27 +348,39 @@ export default function DemandaItem({
 
   // Elemento: Ações do Topo (Enviar para Impressão / Concluir / Editar / Excluir)
   const acoesNode = (
-    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+    <div className="flex items-center gap-1.5 shrink-0">
       {canEdit && (
         <Button
           variant="default"
-          size="sm"
+          size={viewMode === 'grade' ? 'icon' : 'sm'}
           onClick={() => onEnviarParaImpressao?.(demanda)}
-          className="h-7 px-2.5 text-xs font-semibold bg-foreground hover:bg-foreground/90 text-background transition shadow-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
+          className={
+            viewMode === 'grade'
+              ? 'h-7 w-7 bg-foreground hover:bg-foreground/90 text-background transition shadow-xs rounded-lg cursor-pointer shrink-0'
+              : 'h-7 px-2.5 text-xs font-semibold bg-foreground hover:bg-foreground/90 text-background transition shadow-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer'
+          }
           title="Enviar demanda para a Fila de Impressão"
+          aria-label="Enviar para Impressão"
         >
-          <Printer size={13} className="stroke-[2.5]" /> Enviar p/ Impressão
+          <Printer size={13} className="stroke-[2.5]" />
+          {viewMode !== 'grade' && <span>Enviar p/ Impressão</span>}
         </Button>
       )}
       {canEdit && (
         <Button
           variant="outline"
-          size="sm"
+          size={viewMode === 'grade' ? 'icon' : 'sm'}
           onClick={() => onConcluir(demanda)}
-          className="h-7 px-2.5 text-xs font-medium bg-background hover:bg-muted transition shadow-xs rounded-lg"
+          className={
+            viewMode === 'grade'
+              ? 'h-7 w-7 bg-background hover:bg-muted text-foreground transition shadow-xs rounded-lg cursor-pointer shrink-0'
+              : 'h-7 px-2.5 text-xs font-medium bg-background hover:bg-muted transition shadow-xs rounded-lg cursor-pointer'
+          }
           title="Concluir demanda diretamente"
+          aria-label="Concluir"
         >
-          <Check size={13} className="mr-1 stroke-[2]" /> Concluir
+          <Check size={13} className={viewMode === 'grade' ? 'stroke-[2.5]' : 'mr-1 stroke-[2]'} />
+          {viewMode !== 'grade' && <span>Concluir</span>}
         </Button>
       )}
       {canEdit && (
@@ -376,7 +388,7 @@ export default function DemandaItem({
           variant="ghost"
           size="icon"
           onClick={() => onEdit(demanda)}
-          className="h-7 w-7 text-muted-foreground hover:text-foreground rounded-lg"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground rounded-lg shrink-0"
           title="Editar demanda completa"
           aria-label="Editar"
         >
@@ -388,7 +400,7 @@ export default function DemandaItem({
           variant="ghost"
           size="icon"
           onClick={() => onDelete(demanda)}
-          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg shrink-0"
           title="Excluir demanda"
           aria-label="Excluir"
         >
