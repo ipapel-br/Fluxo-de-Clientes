@@ -267,20 +267,21 @@ export default function Fabrica() {
   return (
     <div>
       {/* Topo da Fábrica */}
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Printer size={16} />
-            </span>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Fila de Impressão</h1>
-          </div>
-          <span className="text-sm text-muted-foreground">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+            <Printer size={16} />
+          </span>
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">Fila de Impressão</h1>
+        </div>
+
+        <div className="flex items-center justify-between sm:justify-end gap-2.5">
+          <span className="text-xs sm:text-sm text-muted-foreground">
             {loading ? 'Carregando...' : `${ativasFabrica.length} pedido(s) na linha`}
           </span>
 
           {/* Seletor Lista / Grade */}
-          <div className="flex items-center rounded-lg border border-border bg-muted/60 p-0.5">
+          <div className="flex items-center rounded-lg border border-border bg-muted/60 p-0.5 shrink-0">
             <button
               type="button"
               onClick={() => handleSetViewMode('lista')}

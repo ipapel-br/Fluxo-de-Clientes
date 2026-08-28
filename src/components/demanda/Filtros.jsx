@@ -33,7 +33,7 @@ function FilterSelect({ value, onChange, options = [], placeholder, showAvatar =
       value={value || ALL}
       onValueChange={(v) => onChange(v === ALL ? '' : v)}
     >
-      <SelectTrigger className="h-9 w-auto min-w-[130px] bg-background text-sm">
+      <SelectTrigger className="h-9 w-full sm:w-auto min-w-[125px] bg-background text-sm">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -77,7 +77,7 @@ export default function Filtros({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <div className="relative">
         <Search
           size={16}
@@ -87,10 +87,10 @@ export default function Filtros({
           value={filtros.busca}
           onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
           placeholder="Buscar por cliente, revenda, designer..."
-          className="pl-9 h-10 bg-background"
+          className="pl-9 h-9 sm:h-10 bg-background text-sm"
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
         <FilterSelect
           value={filtros.designer}
           onChange={(v) => setFiltros({ ...filtros, designer: v })}
@@ -135,9 +135,9 @@ export default function Filtros({
             variant="ghost"
             size="sm"
             onClick={limpar}
-            className="h-9 text-muted-foreground hover:text-foreground"
+            className="col-span-2 sm:col-span-1 h-9 text-muted-foreground hover:text-foreground justify-center"
           >
-            <X size={14} className="mr-1" /> Limpar
+            <X size={14} className="mr-1" /> Limpar filtros
           </Button>
         )}
       </div>

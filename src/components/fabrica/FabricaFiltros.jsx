@@ -35,7 +35,7 @@ function FilterSelect({ value, onChange, options = [], placeholder, showAvatar =
       value={value || ALL}
       onValueChange={(v) => onChange(v === ALL ? '' : v)}
     >
-      <SelectTrigger className="h-9 w-auto min-w-[130px] bg-background text-sm">
+      <SelectTrigger className="h-9 w-full sm:w-auto min-w-[130px] bg-background text-sm">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -81,7 +81,7 @@ export default function FabricaFiltros({
   const statusFabricaOpts = STATUS_FABRICA.map((s) => ({ value: s.id, label: s.label }));
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {/* Barra de Busca Principal */}
       <div className="relative">
         <Search
@@ -92,19 +92,19 @@ export default function FabricaFiltros({
           value={filtros.busca}
           onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
           placeholder="Buscar por cliente, pedido, vendedor..."
-          className="pl-9 h-10 bg-background"
+          className="pl-9 h-9 sm:h-10 bg-background text-sm"
         />
       </div>
 
       {/* Filtros Rápidos por Acabamento (Remessas / Lotes) */}
       <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
         <span className="text-xs font-semibold text-muted-foreground mr-1 flex items-center gap-1">
-          <Layers size={13} /> Lote / Acabamento:
+          <Layers size={13} /> Acabamento:
         </span>
         <button
           type="button"
           onClick={() => setFiltros({ ...filtros, acabamento: '' })}
-          className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer ${
+          className={`px-2.5 py-1 rounded-full text-xs font-semibold transition cursor-pointer ${
             !filtros.acabamento
               ? 'bg-foreground text-background shadow-xs'
               : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
@@ -134,7 +134,7 @@ export default function FabricaFiltros({
                     }
                   : undefined
               }
-              className={`px-3 py-1 rounded-full text-xs font-semibold border transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition cursor-pointer ${
                 isSelected
                   ? 'shadow-xs'
                   : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -147,12 +147,12 @@ export default function FabricaFiltros({
       </div>
 
       {/* Filtros Dropdown Complementares */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
         <FilterSelect
           value={filtros.statusFabrica}
           onChange={(v) => setFiltros({ ...filtros, statusFabrica: v })}
           options={statusFabricaOpts}
-          placeholder="Status de Impressão"
+          placeholder="Status"
         />
         <FilterSelect
           value={filtros.urgencia}
@@ -176,7 +176,7 @@ export default function FabricaFiltros({
             variant="ghost"
             size="sm"
             onClick={limpar}
-            className="h-9 text-muted-foreground hover:text-foreground"
+            className="col-span-2 sm:col-span-1 h-9 text-muted-foreground hover:text-foreground justify-center"
           >
             <X size={14} className="mr-1" /> Limpar filtros
           </Button>

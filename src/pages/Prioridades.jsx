@@ -529,9 +529,9 @@ export default function Prioridades() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 mb-4">
+        <div className="flex items-center justify-between sm:justify-start gap-2.5">
+          <span className="text-xs sm:text-sm font-medium text-muted-foreground">
             {loading ? 'Carregando...' : `${ativas.length} demanda(s) ativa(s)`}
           </span>
           {/* Seletor Modo Lista / Modo Grade */}
@@ -565,20 +565,20 @@ export default function Prioridades() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex items-center gap-2">
           {can('priority_create') && (
             <Button
               variant="outline"
               onClick={() => setCsvImportOpen(true)}
-              className="font-medium shadow-2xs"
+              className="font-medium shadow-2xs text-xs sm:text-sm h-9 justify-center"
             >
-              <FileSpreadsheet size={15} className="mr-1.5 text-emerald-600" /> Importar CSV
+              <FileSpreadsheet size={15} className="mr-1.5 text-emerald-600 shrink-0" /> Importar CSV
             </Button>
           )}
 
           {can('priority_create') && (
-            <Button onClick={abrirNovo} className="font-semibold shadow-xs">
-              <Plus size={16} className="mr-1.5" /> Nova demanda
+            <Button onClick={abrirNovo} className="font-semibold shadow-xs text-xs sm:text-sm h-9 justify-center">
+              <Plus size={16} className="mr-1.5 shrink-0" /> Nova demanda
             </Button>
           )}
         </div>

@@ -150,7 +150,7 @@ export default function DemandaItem({
     }}>
       <PopoverTrigger asChild>
         <h3
-          className="font-bold text-base text-foreground leading-tight truncate cursor-pointer hover:text-primary transition group-hover:underline underline-offset-2"
+          className="font-bold text-sm sm:text-base text-foreground leading-snug break-words cursor-pointer hover:text-primary transition group-hover:underline underline-offset-2"
           title="Clique para editar o cliente"
         >
           {demanda.cliente}
@@ -172,20 +172,10 @@ export default function DemandaItem({
       </PopoverContent>
     </Popover>
   ) : (
-    <h3 className="font-bold text-base text-foreground leading-tight truncate">
+    <h3 className="font-bold text-sm sm:text-base text-foreground leading-snug break-words">
       {demanda.cliente}
     </h3>
   );
-
-  async function handleUploadAvatarFor(name, file) {
-    if (!name || !file) return;
-    try {
-      const dataUrl = await processAvatarFile(file);
-      saveAvatar(name, dataUrl);
-    } catch (err) {
-      console.error('Erro ao processar avatar:', err);
-    }
-  }
 
   // Elemento: Responsáveis (Designer / Vendedor / Revenda Popover)
   const responsaveisNode = canEdit ? (
@@ -195,29 +185,25 @@ export default function DemandaItem({
     }}>
       <PopoverTrigger asChild>
         <div
-          className="inline-flex items-center gap-2 cursor-pointer py-0.5 px-1 -ml-1 rounded-md hover:bg-muted transition text-xs text-muted-foreground flex-wrap"
+          className="flex items-center gap-1.5 cursor-pointer py-0.5 rounded-md hover:opacity-85 transition text-xs text-muted-foreground flex-wrap"
           title="Clique para editar responsáveis (Designer, Vendedor, Revenda)"
         >
-          <span className="inline-flex items-center gap-1.5">
-            <span>Designer:</span>
+          <span className="inline-flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded-md border border-border/40 transition">
+            <span className="text-muted-foreground/80 font-normal">Designer:</span>
             <UserAvatar name={demanda.designer} size="xs" />
-            <strong className="font-semibold text-foreground/90">{demanda.designer || '—'}</strong>
+            <strong className="font-semibold text-foreground">{demanda.designer || '—'}</strong>
           </span>
-          <span>·</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span>Vendedor:</span>
+          <span className="inline-flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded-md border border-border/40 transition">
+            <span className="text-muted-foreground/80 font-normal">Vendedor:</span>
             <UserAvatar name={demanda.vendedor} size="xs" />
-            <strong className="font-semibold text-foreground/90">{demanda.vendedor || '—'}</strong>
+            <strong className="font-semibold text-foreground">{demanda.vendedor || '—'}</strong>
           </span>
           {demanda.revenda && (
-            <>
-              <span>·</span>
-              <span className="inline-flex items-center gap-1.5">
-                <span>Revenda:</span>
-                <UserAvatar name={demanda.revenda} size="xs" />
-                <strong className="font-semibold text-foreground/90">{demanda.revenda}</strong>
-              </span>
-            </>
+            <span className="inline-flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded-md border border-border/40 transition">
+              <span className="text-muted-foreground/80 font-normal">Revenda:</span>
+              <UserAvatar name={demanda.revenda} size="xs" />
+              <strong className="font-semibold text-foreground">{demanda.revenda}</strong>
+            </span>
           )}
         </div>
       </PopoverTrigger>
@@ -321,27 +307,23 @@ export default function DemandaItem({
       </PopoverContent>
     </Popover>
   ) : (
-    <div className="inline-flex items-center gap-2 py-0.5 px-0 text-xs text-muted-foreground flex-wrap">
-      <span className="inline-flex items-center gap-1.5">
-        <span>Designer:</span>
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+      <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+        <span className="text-muted-foreground/80 font-normal">Designer:</span>
         <UserAvatar name={demanda.designer} size="xs" />
-        <strong className="font-semibold text-foreground/90">{demanda.designer || '—'}</strong>
+        <strong className="font-semibold text-foreground">{demanda.designer || '—'}</strong>
       </span>
-      <span>·</span>
-      <span className="inline-flex items-center gap-1.5">
-        <span>Vendedor:</span>
+      <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+        <span className="text-muted-foreground/80 font-normal">Vendedor:</span>
         <UserAvatar name={demanda.vendedor} size="xs" />
-        <strong className="font-semibold text-foreground/90">{demanda.vendedor || '—'}</strong>
+        <strong className="font-semibold text-foreground">{demanda.vendedor || '—'}</strong>
       </span>
       {demanda.revenda && (
-        <>
-          <span>·</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span>Revenda:</span>
-            <UserAvatar name={demanda.revenda} size="xs" />
-            <strong className="font-semibold text-foreground/90">{demanda.revenda}</strong>
-          </span>
-        </>
+        <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+          <span className="text-muted-foreground/80 font-normal">Revenda:</span>
+          <UserAvatar name={demanda.revenda} size="xs" />
+          <strong className="font-semibold text-foreground">{demanda.revenda}</strong>
+        </span>
       )}
     </div>
   );

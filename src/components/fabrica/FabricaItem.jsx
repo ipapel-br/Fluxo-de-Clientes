@@ -72,58 +72,82 @@ export default function FabricaItem({
 
   // Elemento: Ações rápidas de Produção (Iniciar / Pausar / Concluir / Retornar)
   const acoesFabricaNode = (
-    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+    <div className="flex items-center gap-1.5 shrink-0">
       {demanda.factory_status === 'em_impressao' ? (
         <>
           {canComplete && (
             <Button
               variant="default"
-              size="sm"
+              size={viewMode === 'grade' ? 'icon' : 'sm'}
               onClick={() => onConcluirImpressao(demanda)}
-              className="h-7 px-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs rounded-lg transition"
+              className={
+                viewMode === 'grade'
+                  ? 'h-7 w-7 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs rounded-lg transition shrink-0'
+                  : 'h-7 px-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs rounded-lg transition'
+              }
               title="Concluir impressão e enviar para concluídos"
+              aria-label="Concluir"
             >
-              <CheckCircle2 size={13} className="mr-1 stroke-[2.5]" /> Concluir
+              <CheckCircle2 size={13} className={viewMode === 'grade' ? 'stroke-[2.5]' : 'mr-1 stroke-[2.5]'} />
+              {viewMode !== 'grade' && <span>Concluir</span>}
             </Button>
           )}
           {canEdit && (
             <Button
               variant="outline"
-              size="sm"
+              size={viewMode === 'grade' ? 'icon' : 'sm'}
               onClick={() => onPausarImpressao(demanda)}
-              className="h-7 px-2 text-xs font-medium text-amber-700 border-amber-200 bg-amber-50/50 hover:bg-amber-100/80 rounded-lg transition"
+              className={
+                viewMode === 'grade'
+                  ? 'h-7 w-7 text-amber-700 border-amber-200 bg-amber-50/50 hover:bg-amber-100/80 rounded-lg transition shrink-0 dark:text-amber-400 dark:bg-amber-950/40 dark:border-amber-900/50'
+                  : 'h-7 px-2 text-xs font-medium text-amber-700 border-amber-200 bg-amber-50/50 hover:bg-amber-100/80 rounded-lg transition dark:text-amber-400 dark:bg-amber-950/40 dark:border-amber-900/50'
+              }
               title="Pausar impressão"
+              aria-label="Pausar"
             >
-              <Pause size={12} className="mr-1" /> Pausar
+              <Pause size={12} className={viewMode === 'grade' ? '' : 'mr-1'} />
+              {viewMode !== 'grade' && <span>Pausar</span>}
             </Button>
           )}
         </>
       ) : demanda.factory_status === 'impresso' ? (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-          <Check size={12} /> Impresso
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/50">
+          <Check size={12} /> {viewMode !== 'grade' && 'Impresso'}
         </span>
       ) : (
         canStart && (
           <Button
             variant="outline"
-            size="sm"
+            size={viewMode === 'grade' ? 'icon' : 'sm'}
             onClick={() => onIniciarImpressao(demanda)}
-            className="h-7 px-2.5 text-xs font-semibold bg-background hover:bg-foreground hover:text-background transition shadow-xs rounded-lg"
+            className={
+              viewMode === 'grade'
+                ? 'h-7 w-7 bg-background hover:bg-foreground hover:text-background transition shadow-xs rounded-lg shrink-0'
+                : 'h-7 px-2.5 text-xs font-semibold bg-background hover:bg-foreground hover:text-background transition shadow-xs rounded-lg'
+            }
             title="Iniciar impressão deste pedido"
+            aria-label="Iniciar"
           >
-            <Play size={12} className="mr-1 fill-current" /> Iniciar
+            <Play size={12} className={viewMode === 'grade' ? 'fill-current' : 'mr-1 fill-current'} />
+            {viewMode !== 'grade' && <span>Iniciar</span>}
           </Button>
         )
       )}
       {canEdit && (
         <Button
           variant="ghost"
-          size="sm"
+          size={viewMode === 'grade' ? 'icon' : 'sm'}
           onClick={() => onDevolverParaPrioridade?.(demanda)}
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+          className={
+            viewMode === 'grade'
+              ? 'h-7 w-7 text-muted-foreground hover:text-foreground rounded-lg shrink-0'
+              : 'h-7 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg'
+          }
           title="Retornar para a fila de Prioridade (Design)"
+          aria-label="Devolver para Prioridade"
         >
-          <Undo2 size={12} className="mr-1" /> Devolver p/ Prioridade
+          <Undo2 size={12} className={viewMode === 'grade' ? '' : 'mr-1'} />
+          {viewMode !== 'grade' && <span>Devolver</span>}
         </Button>
       )}
     </div>
@@ -335,27 +359,24 @@ export default function FabricaItem({
                 </div>
 
                 <div className="space-y-2 flex-1 min-w-0">
-                  <h3 className="font-bold text-base text-foreground leading-tight truncate">
+                  <h3 className="font-bold text-sm sm:text-base text-foreground leading-snug break-words">
                     {demanda.cliente}
                   </h3>
 
-                  <div className="inline-flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
                     {demanda.vendedor && (
-                      <span className="inline-flex items-center gap-1">
-                        <span>Vendedor:</span>
+                      <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+                        <span className="text-muted-foreground/80 font-normal">Vendedor:</span>
                         <UserAvatar name={demanda.vendedor} size="xs" />
-                        <strong className="font-semibold text-foreground/90">{demanda.vendedor}</strong>
+                        <strong className="font-semibold text-foreground">{demanda.vendedor}</strong>
                       </span>
                     )}
                     {demanda.revenda && (
-                      <>
-                        <span>·</span>
-                        <span className="inline-flex items-center gap-1">
-                          <span>Revenda:</span>
-                          <UserAvatar name={demanda.revenda} size="xs" />
-                          <strong className="font-semibold text-foreground/90">{demanda.revenda}</strong>
-                        </span>
-                      </>
+                      <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+                        <span className="text-muted-foreground/80 font-normal">Revenda:</span>
+                        <UserAvatar name={demanda.revenda} size="xs" />
+                        <strong className="font-semibold text-foreground">{demanda.revenda}</strong>
+                      </span>
                     )}
                   </div>
 

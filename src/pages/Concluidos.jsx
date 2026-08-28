@@ -149,13 +149,13 @@ export default function Concluidos() {
         </p>
       </div>
 
-      <div className="relative mb-4 max-w-xs">
+      <div className="relative mb-4 w-full sm:max-w-sm">
         <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         <Input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar concluídos..."
-          className="h-9 pl-8"
+          className="h-9 sm:h-10 pl-8 text-sm"
         />
       </div>
 
@@ -172,18 +172,34 @@ export default function Concluidos() {
           {visiveis.map((d) => {
             const acabamentoCfg = acabamentoConfig(d.acabamento || 'Autocolante');
             return (
-              <div key={d.id} className="rounded-xl border border-border bg-card p-3.5 shadow-2xs hover:border-foreground/20 transition">
-                <div className="flex items-start justify-between gap-3">
+              <div key={d.id} className="rounded-xl border border-border bg-card p-3.5 sm:p-4 shadow-2xs hover:border-foreground/20 transition">
+                <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-base leading-tight truncate text-foreground">{d.cliente}</h3>
-                    {d.demanda && <p className="text-sm text-foreground/80 mt-0.5">{d.demanda}</p>}
+                    <h3 className="font-bold text-sm sm:text-base leading-snug break-words text-foreground">{d.cliente}</h3>
+                    {d.demanda && <p className="text-xs sm:text-sm text-foreground/80 mt-0.5">{d.demanda}</p>}
 
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground mt-1.5">
-                      {d.designer && <span>Designer: <strong className="font-semibold text-foreground/90">{d.designer}</strong></span>}
-                      {d.designer && (d.vendedor || d.revenda) && <span>·</span>}
-                      {d.vendedor && <span>Vendedor: <strong className="font-semibold text-foreground/90">{d.vendedor}</strong></span>}
-                      {d.vendedor && d.revenda && <span>·</span>}
-                      {d.revenda && <span>Revenda {d.revenda}</span>}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5 flex-wrap">
+                      {d.designer && (
+                        <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+                          <span className="text-muted-foreground/80 font-normal">Designer:</span>
+                          <UserAvatar name={d.designer} size="xs" />
+                          <strong className="font-semibold text-foreground">{d.designer}</strong>
+                        </span>
+                      )}
+                      {d.vendedor && (
+                        <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+                          <span className="text-muted-foreground/80 font-normal">Vendedor:</span>
+                          <UserAvatar name={d.vendedor} size="xs" />
+                          <strong className="font-semibold text-foreground">{d.vendedor}</strong>
+                        </span>
+                      )}
+                      {d.revenda && (
+                        <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
+                          <span className="text-muted-foreground/80 font-normal">Revenda:</span>
+                          <UserAvatar name={d.revenda} size="xs" />
+                          <strong className="font-semibold text-foreground">{d.revenda}</strong>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 mt-2">
