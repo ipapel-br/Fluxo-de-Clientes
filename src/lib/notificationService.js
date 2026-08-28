@@ -14,6 +14,21 @@ export const NOTIFICATION_TYPES = {
   REABERTURA: 'reabertura',
 };
 
+function parseArrayField(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Not JSON, return as single string item
+    }
+    return [value];
+  }
+  return [];
+}
+
 /**
  * Formata lista de destinatários com base na demanda e no autor da ação
  * @param {Object} demanda - Demanda associada
@@ -107,28 +122,36 @@ export async function emitirNotificacao({
 export function isNotificacaoParaUsuario(notificacao, usuario) {
   if (!usuario || !notificacao) return false;
 
-  // Não notificar a si mesmo
+  // Não notificar a si mesmo se foi o autor da ação
+  const autorId = notificacao.actor_id ? String(notificacao.actor_id) : '';
+  const autorEmail = (notificacao.actor_email || '').trim().toLowerCase();
+  const autorNome = (notificacao.actor_name || '').trim().toLowerCase();
+
+  const userId = usuario.id ? String(usuario.id) : '';
+  const userEmail = (usuario.email || '').trim().toLowerCase();
+  const userNome = (usuario.nome || '').trim().toLowerCase();
+
   const autorMatch =
-    (notificacao.actor_id && notificacao.actor_id === usuario.id) ||
-    (notificacao.actor_email && notificacao.actor_email.toLowerCase() === (usuario.email || '').toLowerCase()) ||
-    (notificacao.actor_name && notificacao.actor_name.toLowerCase() === (usuario.nome || '').toLowerCase());
+    (autorId && userId && autorId === userId) ||
+    (autorEmail && userEmail && autorEmail === userEmail) ||
+    (autorNome && userNome && autorNome === userNome);
 
   if (autorMatch) return false;
 
   // Se o usuário tiver um perfil alvo (ex: admin)
-  if (Array.isArray(notificacao.target_roles) && notificacao.target_roles.includes(usuario.role)) {
+  const targetRoles = parseArrayField(notificacao.target_roles);
+  if (usuario.role && targetRoles.some((r) => String(r).toLowerCase() === usuario.role.toLowerCase())) {
+    return true;
+  }
+  if (usuario.is_admin && (targetRoles.includes('admin') || targetRoles.includes(PERFIS.ADMIN))) {
     return true;
   }
 
-  // Se o usuário estiver na lista de usuários alvo (por nome, email ou id)
-  const targets = Array.isArray(notificacao.target_users) ? notificacao.target_users : [];
-  const userNome = (usuario.nome || '').trim().toLowerCase();
-  const userEmail = (usuario.email || '').trim().toLowerCase();
-  const userId = usuario.id;
-
+  // Se o usuário estiver na lista de alvos (por nome, email ou id)
+  const targets = parseArrayField(notificacao.target_users);
   return targets.some((t) => {
-    const val = String(t).toLowerCase();
-    return val === userNome || val === userEmail || val === userId;
+    const val = String(t).trim().toLowerCase();
+    return (userNome && val === userNome) || (userEmail && val === userEmail) || (userId && val === userId.toLowerCase());
   });
 }
 
@@ -137,9 +160,15 @@ export function isNotificacaoParaUsuario(notificacao, usuario) {
  */
 export function isNotificacaoLida(notificacao, usuario) {
   if (!usuario || !notificacao) return true;
-  const readBy = Array.isArray(notificacao.read_by) ? notificacao.read_by : [];
-  const userKey = usuario.email || usuario.nome || usuario.id;
-  return readBy.some((k) => String(k).toLowerCase() === String(userKey).toLowerCase());
+  const readBy = parseArrayField(notificacao.read_by);
+  const userEmail = (usuario.email || '').trim().toLowerCase();
+  const userNome = (usuario.nome || '').trim().toLowerCase();
+  const userId = usuario.id ? String(usuario.id).trim().toLowerCase() : '';
+
+  return readBy.some((k) => {
+    const val = String(k).trim().toLowerCase();
+    return (userEmail && val === userEmail) || (userNome && val === userNome) || (userId && val === userId);
+  });
 }
 
 /**
@@ -149,13 +178,12 @@ export async function marcarNotificacaoComoLida(notificacaoId, usuario) {
   if (!usuario || !notificacaoId) return;
   try {
     const notificacoes = await localClient.entities.Notificacao.list('-created_at', 500);
-    const notif = notificacoes.find((n) => n.id === notificacaoId);
+    const notif = (notificacoes || []).find((n) => n.id === notificacaoId);
     if (!notif) return;
 
-    const readBy = Array.isArray(notif.read_by) ? [...notif.read_by] : [];
-    const userKey = usuario.email || usuario.nome || usuario.id;
-
-    if (!readBy.some((k) => String(k).toLowerCase() === String(userKey).toLowerCase())) {
+    if (!isNotificacaoLida(notif, usuario)) {
+      const readBy = parseArrayField(notif.read_by);
+      const userKey = usuario.email || usuario.nome || usuario.id;
       readBy.push(userKey);
       await localClient.entities.Notificacao.update(notificacaoId, { read_by: readBy });
       if (typeof window !== 'undefined') {
@@ -177,15 +205,22 @@ export async function marcarTodasNotificacoesComoLidas(usuario) {
     const userKey = usuario.email || usuario.nome || usuario.id;
 
     const updates = [];
-    for (const notif of notificacoes) {
+    for (const notif of (notificacoes || [])) {
       if (isNotificacaoParaUsuario(notif, usuario) && !isNotificacaoLida(notif, usuario)) {
-        const readBy = Array.isArray(notif.read_by) ? [...notif.read_by, userKey] : [userKey];
+        const readBy = parseArrayField(notif.read_by);
+        readBy.push(userKey);
         updates.push({ id: notif.id, read_by: readBy });
       }
     }
 
     if (updates.length > 0) {
-      await localClient.entities.Notificacao.bulkUpdate(updates);
+      await Promise.all(
+        updates.map((up) =>
+          localClient.entities.Notificacao.update(up.id, { read_by: up.read_by }).catch((e) =>
+            console.warn('[notificationService] Erro ao atualizar notificação:', e)
+          )
+        )
+      );
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('fluxo-clientes:notificacao-atualizada'));
       }
@@ -196,19 +231,66 @@ export async function marcarTodasNotificacoesComoLidas(usuario) {
 }
 
 /**
+ * Exclui uma única notificação por ID
+ */
+export async function excluirNotificacao(notificacaoId) {
+  if (!notificacaoId) return;
+  try {
+    await localClient.entities.Notificacao.delete(notificacaoId);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('fluxo-clientes:notificacao-atualizada'));
+    }
+  } catch (err) {
+    console.error('[notificationService] Erro ao excluir notificação:', err);
+  }
+}
+
+/**
+ * Remove todas as notificações direcionadas a este usuário
+ */
+export async function limparTodasNotificacoes(usuario) {
+  if (!usuario) return;
+  try {
+    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 500);
+    const toDelete = (notificacoes || []).filter((n) => isNotificacaoParaUsuario(n, usuario));
+    if (toDelete.length > 0) {
+      await Promise.all(
+        toDelete.map((n) =>
+          localClient.entities.Notificacao.delete(n.id).catch((e) =>
+            console.warn('[notificationService] Erro ao deletar notificação:', e)
+          )
+        )
+      );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('fluxo-clientes:notificacao-atualizada'));
+      }
+    }
+  } catch (err) {
+    console.error('[notificationService] Erro ao limpar todas as notificações:', err);
+  }
+}
+
+/**
  * Remove notificações lidas antigas
  */
 export async function limparNotificacoesLidas(usuario) {
   if (!usuario) return;
   try {
     const notificacoes = await localClient.entities.Notificacao.list('-created_at', 500);
-    for (const notif of notificacoes) {
-      if (isNotificacaoParaUsuario(notif, usuario) && isNotificacaoLida(notif, usuario)) {
-        await localClient.entities.Notificacao.delete(notif.id);
+    const toDelete = (notificacoes || []).filter(
+      (n) => isNotificacaoParaUsuario(n, usuario) && isNotificacaoLida(n, usuario)
+    );
+    if (toDelete.length > 0) {
+      await Promise.all(
+        toDelete.map((n) =>
+          localClient.entities.Notificacao.delete(n.id).catch((e) =>
+            console.warn('[notificationService] Erro ao deletar notificação lida:', e)
+          )
+        )
+      );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('fluxo-clientes:notificacao-atualizada'));
       }
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('fluxo-clientes:notificacao-atualizada'));
     }
   } catch (err) {
     console.error('[notificationService] Erro ao limpar notificações lidas:', err);

@@ -13,6 +13,7 @@ import {
 import StatusBadge from '@/components/demanda/StatusBadge';
 import EtiquetaBadge from '@/components/demanda/EtiquetaBadge';
 import HistoricoPainel from '@/components/demanda/HistoricoPainel';
+import UserAvatar from '@/components/ui/UserAvatar';
 import AcessoNegado from '@/components/auth/AcessoNegado';
 import { formatarPrazoCompleto } from '@/lib/datas';
 import { faseArteConfig } from '@/lib/progressoArte';

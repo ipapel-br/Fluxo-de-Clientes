@@ -138,6 +138,22 @@ const fallbackStorage = {
     }
     return patch;
   },
+  delete(table, id) {
+    const items = this.read(table);
+    const filtered = items.filter((i) => i.id !== id);
+    this.write(table, filtered);
+    return { success: true };
+  },
+  bulkUpdate(table, updates = []) {
+    const items = this.read(table);
+    const patches = new Map(updates.map((p) => [p.id, p]));
+    const updated = items.map((item) => {
+      const patch = patches.get(item.id);
+      return patch ? { ...item, ...patch, updated_date: new Date().toISOString() } : item;
+    });
+    this.write(table, updated);
+    return updated.filter((item) => patches.has(item.id));
+  },
 };
 
 const TABLE_MAP = {
@@ -296,21 +312,32 @@ export function createSupabaseEntityApi(entityName) {
     },
 
     async delete(id) {
-      if (!supabase) throw new Error('Supabase não configurado');
-      const { error } = await supabase
-        .from(table)
-        .delete()
-        .eq('id', id);
+      if (!supabase) return fallbackStorage.delete(table, id);
+      try {
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .eq('id', id);
 
-      if (error) {
-        console.error(`[Supabase] Erro ao deletar em ${table}:`, error);
-        throw error;
+        if (error) {
+          if (error.code === 'PGRST205' || error.message?.toLowerCase().includes("could not find the table")) {
+            console.warn(`[Supabase] Tabela '${table}' não encontrada no banco. Removendo do armazenamento local temporário.`);
+            return fallbackStorage.delete(table, id);
+          }
+          console.error(`[Supabase] Erro ao deletar em ${table}:`, error);
+          return fallbackStorage.delete(table, id);
+        }
+        return { success: true };
+      } catch (err) {
+        console.error(`[Supabase] Exceção ao deletar em ${table}:`, err);
+        return fallbackStorage.delete(table, id);
       }
-      return { success: true };
     },
 
     async bulkUpdate(updates = []) {
-      if (!supabase || updates.length === 0) return [];
+      if (!supabase || updates.length === 0) {
+        return fallbackStorage.bulkUpdate ? fallbackStorage.bulkUpdate(table, updates) : [];
+      }
       const now = new Date().toISOString();
       
       const promises = updates.map(async (item) => {
@@ -329,6 +356,12 @@ export function createSupabaseEntityApi(entityName) {
             delete currentPayload[match[1]];
             continue;
           }
+
+          if (res.error.code === 'PGRST205' || res.error.message?.toLowerCase().includes("could not find the table")) {
+            fallbackStorage.update(table, item.id, currentPayload);
+            return { data: [currentPayload], error: null };
+          }
+
           return res;
         }
       });

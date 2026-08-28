@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
+  Check,
   CheckCheck,
   Trash2,
   Clock,
@@ -27,7 +28,8 @@ import {
   isNotificacaoLida,
   marcarNotificacaoComoLida,
   marcarTodasNotificacoesComoLidas,
-  limparNotificacoesLidas,
+  excluirNotificacao,
+  limparTodasNotificacoes,
   NOTIFICATION_TYPES,
 } from '@/lib/notificationService';
 
@@ -88,7 +90,7 @@ export default function NotificationBell() {
     window.addEventListener('fluxo-clientes:notificacao-criada', handleCreated);
     window.addEventListener('fluxo-clientes:notificacao-atualizada', handleUpdated);
 
-    // Polling sutil a cada 15 segundos para atualizar badges se houverem novos eventos
+    // Polling a cada 15 segundos para atualizar badges se houver novos eventos
     const interval = setInterval(carregarNotificacoes, 15000);
 
     return () => {
@@ -101,7 +103,7 @@ export default function NotificationBell() {
   // Filtrar apenas notificações destinadas a este usuário
   const minhasNotificacoes = useMemo(() => {
     if (!usuario) return [];
-    return notificacoes.filter((n) => isNotificacaoParaUsuario(n, usuario));
+    return (notificacoes || []).filter((n) => isNotificacaoParaUsuario(n, usuario));
   }, [notificacoes, usuario]);
 
   // Contagem de não lidas
@@ -120,15 +122,19 @@ export default function NotificationBell() {
 
   async function handleClicarNotificacao(notif) {
     if (!usuario) return;
-    // Marcar como lida
-    await marcarNotificacaoComoLida(notif.id, usuario);
+    const userKey = usuario.email || usuario.nome || usuario.id;
+
+    // Atualização otimista imediata
     setNotificacoes((prev) =>
       prev.map((n) =>
         n.id === notif.id
-          ? { ...n, read_by: [...(n.read_by || []), usuario.email || usuario.nome || usuario.id] }
+          ? { ...n, read_by: [...(Array.isArray(n.read_by) ? n.read_by : []), userKey] }
           : n
       )
     );
+
+    // Marcar como lida no backend
+    marcarNotificacaoComoLida(notif.id, usuario);
 
     setOpen(false);
 
@@ -151,9 +157,51 @@ export default function NotificationBell() {
     }
   }
 
+  async function handleMarcarIndividual(e, notif) {
+    e.stopPropagation();
+    if (!usuario) return;
+    const userKey = usuario.email || usuario.nome || usuario.id;
+
+    // Atualização otimista
+    setNotificacoes((prev) =>
+      prev.map((n) =>
+        n.id === notif.id
+          ? { ...n, read_by: [...(Array.isArray(n.read_by) ? n.read_by : []), userKey] }
+          : n
+      )
+    );
+
+    await marcarNotificacaoComoLida(notif.id, usuario);
+    await carregarNotificacoes();
+  }
+
+  async function handleExcluirIndividual(e, notif) {
+    e.stopPropagation();
+    if (!usuario) return;
+
+    // Atualização otimista
+    setNotificacoes((prev) => prev.filter((n) => n.id !== notif.id));
+
+    await excluirNotificacao(notif.id);
+    await carregarNotificacoes();
+  }
+
   async function handleMarcarTodasLidas() {
     if (!usuario) return;
     setLoading(true);
+    const userKey = usuario.email || usuario.nome || usuario.id;
+
+    // Atualização otimista imediata na interface
+    setNotificacoes((prev) =>
+      prev.map((n) => {
+        if (isNotificacaoParaUsuario(n, usuario)) {
+          const currentRead = Array.isArray(n.read_by) ? n.read_by : [];
+          return { ...n, read_by: [...currentRead, userKey] };
+        }
+        return n;
+      })
+    );
+
     try {
       await marcarTodasNotificacoesComoLidas(usuario);
       await carregarNotificacoes();
@@ -162,11 +210,15 @@ export default function NotificationBell() {
     }
   }
 
-  async function handleLimparLidas() {
+  async function handleLimparTodas() {
     if (!usuario) return;
     setLoading(true);
+
+    // Atualização otimista imediata na interface
+    setNotificacoes((prev) => prev.filter((n) => !isNotificacaoParaUsuario(n, usuario)));
+
     try {
-      await limparNotificacoesLidas(usuario);
+      await limparTodasNotificacoes(usuario);
       await carregarNotificacoes();
     } finally {
       setLoading(false);
@@ -216,22 +268,25 @@ export default function NotificationBell() {
                 size="sm"
                 onClick={handleMarcarTodasLidas}
                 disabled={loading}
-                className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground cursor-pointer"
                 title="Marcar todas como lidas"
               >
                 <CheckCheck size={13} className="mr-1 text-primary" /> Ler todas
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLimparLidas}
-              disabled={loading}
-              className="h-7 px-1.5 text-[11px] text-muted-foreground hover:text-destructive"
-              title="Limpar lidas"
-            >
-              <Trash2 size={13} />
-            </Button>
+            {minhasNotificacoes.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLimparTodas}
+                disabled={loading}
+                className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-destructive cursor-pointer flex items-center gap-1"
+                title="Excluir todas as notificações"
+              >
+                <Trash2 size={13} />
+                <span className="hidden sm:inline">Excluir</span>
+              </Button>
+            )}
           </div>
         </div>
 
@@ -331,13 +386,37 @@ export default function NotificationBell() {
                       {notif.mensagem}
                     </p>
 
-                    {notif.cliente_nome && (
-                      <div className="pt-1 flex items-center gap-1.5">
-                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-muted/80 text-foreground/80">
+                    <div className="pt-1 flex items-center justify-between gap-1.5">
+                      {notif.cliente_nome ? (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted/80 text-foreground/80 truncate max-w-[180px]">
                           {notif.cliente_nome}
                         </span>
+                      ) : (
+                        <span />
+                      )}
+
+                      {/* Ações individuais ao passar o mouse ou em mobile */}
+                      <div className="flex items-center gap-1 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!lida && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleMarcarIndividual(e, notif)}
+                            className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-muted/80 transition cursor-pointer"
+                            title="Marcar como lida"
+                          >
+                            <Check size={13} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleExcluirIndividual(e, notif)}
+                          className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition cursor-pointer"
+                          title="Excluir notificação"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               );
@@ -348,3 +427,4 @@ export default function NotificationBell() {
     </Popover>
   );
 }
+
