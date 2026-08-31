@@ -111,6 +111,20 @@ export function AuthProvider({ children }) {
     [usuario]
   );
 
+  // Registrar presença do usuário atual (atualiza last_access_at no banco e estado local)
+  const registrarPresenca = useCallback(async (userId) => {
+    if (!userId) return;
+    const agora = new Date().toISOString();
+    try {
+      await localClient.entities.Usuario.update(userId, { last_access_at: agora });
+      setUsuariosLista((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, last_access_at: agora } : u))
+      );
+    } catch (err) {
+      console.warn('[AuthContext] Erro ao registrar presença:', err);
+    }
+  }, []);
+
   // Verificar sessão inicial e sincronizar com Supabase se configurado
   useEffect(() => {
     async function inicializar() {
@@ -151,6 +165,42 @@ export function AuthProvider({ children }) {
     }
     inicializar();
   }, [carregarUsuariosEConfig]);
+
+  // Heartbeat em tempo real de presença e último acesso
+  useEffect(() => {
+    if (!usuario?.id) return;
+
+    // Atualiza imediatamente na inicialização/login
+    registrarPresenca(usuario.id);
+
+    // Heartbeat a cada 2 minutos
+    const interval = setInterval(() => {
+      registrarPresenca(usuario.id);
+    }, 2 * 60 * 1000);
+
+    // Atualiza ao voltar o foco para a janela (com throttle de 60 segundos)
+    let lastTouch = Date.now();
+    const handleFocus = () => {
+      if (Date.now() - lastTouch > 60 * 1000) {
+        lastTouch = Date.now();
+        registrarPresenca(usuario.id);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [usuario?.id, registrarPresenca]);
 
   // Se não estiver logado, abrir modal de login
   useEffect(() => {
@@ -431,6 +481,56 @@ export function AuthProvider({ children }) {
   }
 
   /**
+   * Excluir usuário permanentemente
+   */
+  async function excluirUsuario(id) {
+    if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN) {
+      return { success: false, error: 'Você não tem permissão para excluir usuários.' };
+    }
+
+    try {
+      const users = await localClient.entities.Usuario.list('nome', 500);
+      const alvo = users.find((u) => u.id === id);
+      if (!alvo) {
+        return { success: false, error: 'Usuário não encontrado.' };
+      }
+
+      // Proteção 1: Não permitir excluir a si próprio
+      if (usuario?.id === id || (usuario?.email && alvo.email && usuario.email.toLowerCase().trim() === alvo.email.toLowerCase().trim())) {
+        return { success: false, error: 'Você não pode excluir sua própria conta enquanto estiver conectado.' };
+      }
+
+      // Proteção 2: Não permitir excluir a conta do desenvolvedor Alan Santos
+      if ((alvo.email || '').toLowerCase().trim() === 'alan.d.santos2021@gmail.com') {
+        return { success: false, error: 'A conta principal do desenvolvedor não pode ser excluída.' };
+      }
+
+      // Proteção 3: Não permitir excluir o único administrador ativo
+      const adminsAtivos = users.filter((u) => u.role === PERFIS.ADMIN && u.status === 'ativo' && u.id !== id);
+      if (alvo.role === PERFIS.ADMIN && adminsAtivos.length === 0) {
+        return { success: false, error: 'Não é permitido excluir o único Administrador ativo do sistema.' };
+      }
+
+      await localClient.entities.Usuario.delete(id);
+
+      await registrarAuditoria(
+        'EXCLUIR_USUARIO',
+        'usuario',
+        id,
+        alvo,
+        null,
+        `${usuario?.nome || 'Admin'} excluiu o usuário ${alvo.nome} (${alvo.email})`
+      );
+
+      await carregarUsuariosEConfig();
+      return { success: true };
+    } catch (err) {
+      console.error('[AuthContext] Erro ao excluir usuário:', err);
+      return { success: false, error: 'Erro ao excluir usuário.' };
+    }
+  }
+
+  /**
    * Atualizar configurações do sistema
    */
   async function atualizarConfiguracao(patch) {
@@ -581,6 +681,7 @@ export function AuthProvider({ children }) {
         atualizarAvatar,
         desativarUsuario,
         ativarUsuario,
+        excluirUsuario,
         adicionarRevenda,
         atualizarRevenda,
         excluirRevenda,

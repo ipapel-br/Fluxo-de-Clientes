@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { ListOrdered, Printer, CheckCircle2, Shield, Menu, User, LogOut, Camera, Sun, Moon, Monitor } from 'lucide-react';
+import { ListOrdered, Printer, CheckCircle2, Shield, Menu, User, LogOut, Sun, Moon, Monitor } from 'lucide-react';
 import UserMenu from '@/components/auth/UserMenu';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import ThemeToggle from '@/components/ui/ThemeToggle';

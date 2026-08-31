@@ -21,6 +21,7 @@ import {
   Plus,
   Camera,
   Briefcase,
+  RefreshCw,
 } from 'lucide-react';
 import { localClient } from '@/api/localClient';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,7 @@ export default function Admin() {
     recarregarUsuarios,
     adicionarUsuario,
     atualizarUsuario,
+    excluirUsuario,
     adicionarRevenda,
     atualizarRevenda,
     excluirRevenda,
@@ -124,6 +126,29 @@ export default function Admin() {
   const [logoRevenda, setLogoRevenda] = useState('');
   const [salvandoRevenda, setSalvandoRevenda] = useState(false);
   const [erroRevenda, setErroRevenda] = useState('');
+
+  const [recarregando, setRecarregando] = useState(false);
+
+  // Recarregar lista e atualizar status de presença em tempo real
+  const handleRecarregar = useCallback(async () => {
+    setRecarregando(true);
+    try {
+      await recarregarUsuarios();
+    } finally {
+      setRecarregando(false);
+    }
+  }, [recarregarUsuarios]);
+
+  // Polling automático a cada 15s na aba de usuários para manter o último acesso sempre real
+  useEffect(() => {
+    if (abaAtiva === 'usuarios') {
+      recarregarUsuarios();
+      const interval = setInterval(() => {
+        recarregarUsuarios();
+      }, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [abaAtiva, recarregarUsuarios]);
 
   // Carregar logs de auditoria
   const carregarAuditLogs = useCallback(async () => {
@@ -281,6 +306,35 @@ export default function Admin() {
     }
   }
 
+  // Excluir usuário
+  async function handleExcluirUsuario(u) {
+    if (u.id === usuario?.id || (u.email && usuario?.email && u.email.toLowerCase().trim() === usuario.email.toLowerCase().trim())) {
+      window.alert('Você não pode excluir sua própria conta enquanto estiver conectado.');
+      return;
+    }
+    if ((u.email || '').toLowerCase().trim() === 'alan.d.santos2021@gmail.com') {
+      window.alert('A conta principal do desenvolvedor não pode ser excluída.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Deseja realmente EXCLUIR permanentemente o usuário "${u.nome}" (${u.email})?\n\nEsta ação apagará o cadastro do usuário do sistema e não poderá ser desfeita.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await excluirUsuario(u.id);
+      if (!res.success) {
+        window.alert(res.error || 'Não foi possível excluir o usuário.');
+      }
+    } catch (err) {
+      console.error('[Admin] Erro ao excluir usuário:', err);
+      window.alert('Erro ao excluir usuário.');
+    }
+  }
+
   // Handlers para Revendas
   function abrirNovaRevenda() {
     setRevendaEditando(null);
@@ -417,7 +471,7 @@ export default function Admin() {
 
         {/* ABA: USUÁRIOS */}
         <TabsContent value="usuarios" className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="relative max-w-xs w-full">
               <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
@@ -427,6 +481,17 @@ export default function Admin() {
                 className="h-9 pl-8"
               />
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRecarregar}
+              disabled={recarregando}
+              className="h-9 text-xs font-semibold gap-1.5 shadow-2xs"
+              title="Atualizar acessos e lista de usuários em tempo real"
+            >
+              <RefreshCw size={13} className={recarregando ? 'animate-spin text-primary' : ''} />
+              <span>{recarregando ? 'Atualizando...' : 'Atualizar acessos'}</span>
+            </Button>
           </div>
 
           <div className="rounded-2xl border border-border bg-card shadow-2xs overflow-hidden">
@@ -453,6 +518,14 @@ export default function Admin() {
                     usuariosFiltrados.map((u) => {
                       const RoleIcon = ROLE_ICONS[u.role] || UserIcon;
                       const isAtivo = u.status === 'ativo';
+
+                      // Cálculo de tempo real de acesso
+                      let isOnline = false;
+                      if (u.last_access_at) {
+                        const diffMin = (Date.now() - new Date(u.last_access_at).getTime()) / 60000;
+                        isOnline = diffMin >= 0 && diffMin <= 4;
+                      }
+
                       return (
                         <tr key={u.id} className="hover:bg-muted/30 transition">
                           <td className="py-3 px-4">
@@ -480,8 +553,23 @@ export default function Admin() {
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {u.last_access_at ? formatarDataHistorico(u.last_access_at) : 'Nunca acessou'}
+                          <td className="py-3 px-4 text-xs">
+                            {u.last_access_at ? (
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {isOnline && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Online agora
+                                    </span>
+                                  )}
+                                  <span className={isOnline ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+                                    {formatarDataHistorico(u.last_access_at)}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">Nunca acessou</span>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-xs text-muted-foreground">
                             {formatarDataHistorico(u.created_date)}
@@ -501,11 +589,20 @@ export default function Admin() {
                                 size="sm"
                                 onClick={() => alternarStatusUsuario(u)}
                                 className={`h-8 px-2 text-xs font-medium ${
-                                  isAtivo ? 'text-destructive hover:bg-destructive/10' : 'text-emerald-700 hover:bg-emerald-50'
+                                  isAtivo ? 'text-amber-600 hover:bg-amber-500/10' : 'text-emerald-700 hover:bg-emerald-50'
                                 }`}
                                 title={isAtivo ? 'Desativar usuário' : 'Ativar usuário'}
                               >
                                 <Power size={13} className="mr-1" /> {isAtivo ? 'Desativar' : 'Ativar'}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleExcluirUsuario(u)}
+                                className="h-8 px-2 text-xs font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                title="Excluir usuário permanentemente"
+                              >
+                                <Trash2 size={13} className="mr-1" /> Excluir
                               </Button>
                             </div>
                           </td>
