@@ -179,7 +179,7 @@ export function isNotificacaoLida(notificacao, usuario) {
 export async function marcarNotificacaoComoLida(notificacaoId, usuario) {
   if (!usuario || !notificacaoId) return;
   try {
-    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 500);
+    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 50);
     const notif = (notificacoes || []).find((n) => n.id === notificacaoId);
     if (!notif) return;
 
@@ -203,7 +203,7 @@ export async function marcarNotificacaoComoLida(notificacaoId, usuario) {
 export async function marcarTodasNotificacoesComoLidas(usuario) {
   if (!usuario) return;
   try {
-    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 500);
+    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 50);
     const userKey = usuario.email || usuario.nome || usuario.id;
 
     const updates = [];
@@ -253,7 +253,7 @@ export async function excluirNotificacao(notificacaoId) {
 export async function limparTodasNotificacoes(usuario) {
   if (!usuario) return;
   try {
-    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 500);
+    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 50);
     const toDelete = (notificacoes || []).filter((n) => isNotificacaoParaUsuario(n, usuario));
     if (toDelete.length > 0) {
       await Promise.all(
@@ -278,7 +278,7 @@ export async function limparTodasNotificacoes(usuario) {
 export async function limparNotificacoesLidas(usuario) {
   if (!usuario) return;
   try {
-    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 500);
+    const notificacoes = await localClient.entities.Notificacao.list('-created_at', 50);
     const toDelete = (notificacoes || []).filter(
       (n) => isNotificacaoParaUsuario(n, usuario) && isNotificacaoLida(n, usuario)
     );
