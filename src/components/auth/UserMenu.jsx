@@ -48,6 +48,8 @@ export default function UserMenu() {
     .map((p) => p[0].toUpperCase())
     .join('');
 
+  const hasAvatar = Boolean(usuario.avatar_url);
+
   async function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
