@@ -1,52 +1,31 @@
 import { useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import {
-  GripVertical,
+  Check,
+  Printer,
+  MoreHorizontal,
   Pencil,
   Trash2,
-  Calendar as CalendarIcon,
-  Check,
-  Plus,
-  Globe,
-  X,
+  Copy,
   History,
-  Printer,
+  Plus,
 } from 'lucide-react';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Calendar } from '@/components/ui/calendar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import RegistrarAlteracaoDialog from './RegistrarAlteracaoDialog';
-import HistoricoPainel from './HistoricoPainel';
+import { Calendar } from '@/components/ui/calendar';
 import UserAvatar from '@/components/ui/UserAvatar';
-import { labelPrazo, tipoAlertaPrazo } from '@/lib/datas';
-import { ETIQUETAS, etiquetaConfig } from '@/lib/etiquetas';
-import { FASES_ARTE, faseArteConfig } from '@/lib/progressoArte';
-import { hexToRgba } from '@/lib/statusColors';
+import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
+import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
+import { getStatusColor, getStatusBadgeStyle } from '@/lib/statusColors';
 import { useAuth } from '@/contexts/AuthContext';
-
-const PRAZO_CLASSES = {
-  vencido: 'text-red-700 bg-red-50/90 border-red-200 hover:bg-red-100 dark:text-red-400 dark:bg-red-950/40 dark:border-red-900/60 dark:hover:bg-red-900/50',
-  hoje: 'text-amber-700 bg-amber-50/90 border-amber-200 font-semibold hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-950/40 dark:border-amber-900/60 dark:hover:bg-amber-900/50',
-  amanha: 'text-sky-700 bg-sky-50/90 border-sky-200 hover:bg-sky-100 dark:text-sky-400 dark:bg-sky-950/40 dark:border-sky-900/60 dark:hover:bg-sky-900/50',
-  null: 'text-muted-foreground bg-muted/40 border-border hover:bg-muted',
-};
 
 export default function DemandaItem({
   demanda,
@@ -62,36 +41,52 @@ export default function DemandaItem({
   onEnviarParaImpressao,
   onQuickUpdate,
   onRegistrarAlteracao,
+  onDuplicar,
+  onVerHistorico,
+  onSelectRow,
+  isSelected = false,
   dragDisabled,
   destaque,
   viewMode = 'lista',
 }) {
   const { can } = useAuth();
-  const [alteracaoOpen, setAlteracaoOpen] = useState(false);
-  const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
-  const [clientePopoverOpen, setClientePopoverOpen] = useState(false);
-  const [clienteTemp, setClienteTemp] = useState(demanda.cliente || '');
-  const [etapaPopoverOpen, setEtapaPopoverOpen] = useState(false);
-  const [etapaTemp, setEtapaTemp] = useState(demanda.demanda || '');
-  const [responsaveisPopoverOpen, setResponsaveisPopoverOpen] = useState(false);
-  const [respTemp, setRespTemp] = useState({
-    designer: demanda.designer || '',
-    vendedor: demanda.vendedor || '',
-    revenda: demanda.revenda || '',
-  });
   const [prazoPopoverOpen, setPrazoPopoverOpen] = useState(false);
-  const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
-  const [etiquetaPopoverOpen, setEtiquetaPopoverOpen] = useState(false);
-  const [faseArtePopoverOpen, setFaseArtePopoverOpen] = useState(false);
+  const [isEditingTexto, setIsEditingTexto] = useState(false);
+  const [textoEdit, setTextoEdit] = useState(demanda.demanda || '');
 
   const canEdit = can('priority_edit');
   const canReorder = can('priority_reorder');
-  const canViewHistory = can('history_view');
 
+  function handleSaveTexto() {
+    setIsEditingTexto(false);
+    const novoValor = textoEdit.trim();
+    if (novoValor !== (demanda.demanda || '').trim()) {
+      if (onRegistrarAlteracao) {
+        onRegistrarAlteracao(demanda, novoValor);
+      } else {
+        onQuickUpdate?.(demanda, { demanda: novoValor });
+      }
+    }
+  }
+
+  function handleCancelTexto() {
+    setIsEditingTexto(false);
+    setTextoEdit(demanda.demanda || '');
+  }
+
+  // Identificação de prioridade e prazo
+  const prioridadeValor = (demanda.etiqueta || '').toLowerCase();
   const alerta = tipoAlertaPrazo(demanda.prazo);
-  const prazoClass = PRAZO_CLASSES[alerta];
-  const etiquetaCfg = etiquetaConfig(demanda.etiqueta);
   const faseArteCfg = faseArteConfig(demanda.fase_arte);
+
+  // Formatação do Prazo e Status
+  const prazoTexto = (() => {
+    if (!demanda.prazo) return null;
+    if (alerta === 'hoje') return { data: 'Hoje', status: null, isHoje: true };
+    if (alerta === 'vencido') return { data: formatarPrazo(demanda.prazo) || demanda.prazo, status: 'Vencido', isVencido: true };
+    if (alerta === 'amanha') return { data: 'Amanhã', status: null };
+    return { data: formatarPrazo(demanda.prazo) || demanda.prazo, status: null };
+  })();
 
   const prazoDate = (() => {
     if (!demanda.prazo) return undefined;
@@ -101,30 +96,6 @@ export default function DemandaItem({
     if (!y || !m || !d) return undefined;
     return new Date(y, m - 1, d);
   })();
-
-  function salvarCliente() {
-    if (clienteTemp.trim() && clienteTemp.trim() !== demanda.cliente) {
-      onQuickUpdate?.(demanda, { cliente: clienteTemp.trim() });
-    }
-    setClientePopoverOpen(false);
-  }
-
-  function salvarEtapa() {
-    if (etapaTemp.trim() !== (demanda.demanda || '')) {
-      onQuickUpdate?.(demanda, { demanda: etapaTemp.trim() });
-    }
-    setEtapaPopoverOpen(false);
-  }
-
-  function salvarResponsaveis() {
-    const patch = {
-      designer: (respTemp.designer || '').trim(),
-      vendedor: (respTemp.vendedor || '').trim(),
-      revenda: (respTemp.revenda || '').trim(),
-    };
-    onQuickUpdate?.(demanda, patch);
-    setResponsaveisPopoverOpen(false);
-  }
 
   function handleSelectPrazo(date) {
     if (!date) {
@@ -138,773 +109,424 @@ export default function DemandaItem({
     setPrazoPopoverOpen(false);
   }
 
-  // Elemento: Título do Cliente (Popover Inline)
-  const clienteNode = canEdit ? (
-    <Popover open={clientePopoverOpen} onOpenChange={(o) => {
-      if (o) setClienteTemp(demanda.cliente || '');
-      setClientePopoverOpen(o);
-    }}>
-      <PopoverTrigger asChild>
-        <h3
-          className="font-bold text-sm sm:text-base text-foreground leading-none cursor-pointer hover:text-primary transition group-hover:underline underline-offset-2 truncate"
-          title="Clique para editar o cliente"
-        >
-          {demanda.cliente}
-        </h3>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 p-3 space-y-2.5" align="start">
-        <Label htmlFor={`cli-${demanda.id}`} className="text-xs font-semibold">Editar nome do cliente</Label>
-        <Input
-          id={`cli-${demanda.id}`}
-          value={clienteTemp}
-          onChange={(e) => setClienteTemp(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && salvarCliente()}
-          autoFocus
-        />
-        <div className="flex justify-end gap-1.5 pt-1">
-          <Button size="sm" variant="ghost" onClick={() => setClientePopoverOpen(false)} className="h-7 text-xs">Cancelar</Button>
-          <Button size="sm" onClick={salvarCliente} className="h-7 text-xs">Salvar</Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  ) : (
-    <h3 className="font-bold text-sm sm:text-base text-foreground leading-none truncate">
-      {demanda.cliente}
-    </h3>
-  );
+  // Nome da etapa (Fase da arte exclusiva)
+  const nomeEtapa = faseArteCfg?.label || 'Iniciando arte';
+  const corEtapa = faseArteCfg?.cor || '#0284c7';
 
-  // Badge: Etiqueta
-  const etiquetaNode = canEdit ? (
-    <Popover open={etiquetaPopoverOpen} onOpenChange={setEtiquetaPopoverOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="cursor-pointer transition-transform hover:scale-105 shrink-0"
-          title="Clique para alterar a etiqueta"
-        >
-          {etiquetaCfg ? (
-            <span
-              style={{
-                backgroundColor: hexToRgba(etiquetaCfg.cor, 0.16),
-                color: etiquetaCfg.cor,
-                borderColor: hexToRgba(etiquetaCfg.cor, 0.38),
-              }}
-              className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider whitespace-nowrap shadow-2xs"
-            >
-              {etiquetaCfg.label}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10.5px] text-muted-foreground hover:border-foreground/40 transition">
-              <Plus size={10} /> Etiqueta
-            </span>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-56 p-2 space-y-1" align="start">
-        <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Alterar Etiqueta</div>
-        {ETIQUETAS.map((e) => {
-          const cfg = etiquetaConfig(e.valor);
-          const isSelected = demanda.etiqueta === e.valor;
-          return (
-            <button
-              key={e.valor}
-              type="button"
-              onClick={() => {
-                onQuickUpdate?.(demanda, { etiqueta: e.valor });
-                setEtiquetaPopoverOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition ${
-                isSelected ? 'bg-accent font-semibold text-foreground' : 'hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cfg.cor }} />
-                {e.label}
-              </span>
-              {isSelected && <Check size={13} className="text-foreground" />}
-            </button>
-          );
-        })}
-        {demanda.etiqueta && (
-          <button
-            type="button"
-            onClick={() => {
-              onQuickUpdate?.(demanda, { etiqueta: '' });
-              setEtiquetaPopoverOpen(false);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-destructive hover:bg-destructive/10 rounded-md transition"
-          >
-            <X size={13} /> Remover etiqueta
-          </button>
-        )}
-      </PopoverContent>
-    </Popover>
-  ) : etiquetaCfg ? (
-    <span
-      style={{
-        backgroundColor: hexToRgba(etiquetaCfg.cor, 0.16),
-        color: etiquetaCfg.cor,
-        borderColor: hexToRgba(etiquetaCfg.cor, 0.38),
-      }}
-      className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider whitespace-nowrap shadow-2xs shrink-0"
-    >
-      {etiquetaCfg.label}
-    </span>
-  ) : null;
+  const isImpressao =
+    (status?.nome || '').toLowerCase().includes('impress') ||
+    (demanda.demanda || '').toLowerCase().includes('impress') ||
+    demanda.factory_status === 'aguardando' ||
+    demanda.factory_status === 'em_impressao' ||
+    demanda.status_id === 'status_impressao';
 
-  // Badge: Prazo
-  const prazoNode = canEdit ? (
-    <Popover open={prazoPopoverOpen} onOpenChange={setPrazoPopoverOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="cursor-pointer transition-transform hover:scale-105 shrink-0"
-          title="Clique para alterar o prazo"
-        >
-          {demanda.prazo ? (
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition font-medium ${prazoClass}`}
-            >
-              <CalendarIcon size={12} />
-              {labelPrazo(demanda.prazo)}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-foreground/40 transition">
-              <Plus size={11} /> Prazo
-            </span>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={prazoDate}
-          onSelect={handleSelectPrazo}
-          locale={ptBR}
-          initialFocus
-        />
-        {demanda.prazo && (
-          <div className="p-2 border-t border-border flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onQuickUpdate?.(demanda, { prazo: '' });
-                setPrazoPopoverOpen(false);
-              }}
-              className="h-7 text-xs text-destructive hover:bg-destructive/10"
-            >
-              <X size={12} className="mr-1" /> Limpar prazo
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  ) : demanda.prazo ? (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium shrink-0 ${prazoClass}`}>
-      <CalendarIcon size={12} />
-      {labelPrazo(demanda.prazo)}
-    </span>
-  ) : null;
+  // Subtítulo secundário abaixo do nome do cliente (Briefing / Orientação ou Bitrix)
+  const subtituloDemanda = demanda.demanda && demanda.demanda.trim()
+    ? demanda.demanda.trim()
+    : (demanda.bitrix_id ? `Bitrix #${demanda.bitrix_id}` : null);
 
-  // Badge: Status
-  const statusNode = canEdit ? (
-    <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="cursor-pointer transition-transform hover:scale-105 shrink-0"
-          title="Clique para alterar o status"
-        >
-          {status ? (
-            <span
-              style={{
-                backgroundColor: hexToRgba(status.cor || '#64748b', 0.16),
-                color: status.cor || '#64748b',
-                borderColor: hexToRgba(status.cor || '#64748b', 0.35),
-              }}
-              className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap shadow-2xs"
-            >
-              {status.nome}
-            </span>
-          ) : (
-            <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs text-muted-foreground">
-              Sem status
-            </span>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-56 p-2 space-y-1" align="start">
-        <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Alterar Status</div>
-        {statuses
-          .slice()
-          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
-          .map((st) => {
-            const isSelected = demanda.status_id === st.id;
-            return (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => {
-                  onQuickUpdate?.(demanda, { status_id: st.id });
-                  setStatusPopoverOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition ${
-                  isSelected ? 'bg-accent font-semibold text-foreground' : 'hover:bg-muted text-muted-foreground'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: st.cor || '#64748b' }} />
-                  <span className="truncate">{st.nome}</span>
-                </span>
-                {isSelected && <Check size={13} className="text-foreground shrink-0" />}
-              </button>
-            );
-          })}
-      </PopoverContent>
-    </Popover>
-  ) : status ? (
-    <span
-      style={{
-        backgroundColor: hexToRgba(status.cor || '#64748b', 0.16),
-        color: status.cor || '#64748b',
-        borderColor: hexToRgba(status.cor || '#64748b', 0.35),
-      }}
-      className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap shadow-2xs shrink-0"
-    >
-      {status.nome}
-    </span>
-  ) : null;
+  const designerObj = designers.find((d) => (d.nome || d.value || d.label) === demanda.designer);
+  const vendedorObj = vendedores.find((v) => (v.nome || v.value || v.label) === demanda.vendedor);
+  const designerAvatar = designerObj?.avatar_url || '';
+  const vendedorAvatar = vendedorObj?.avatar_url || '';
 
-  // Badge: Fase da Arte
-  const faseArteNode = canEdit ? (
-    <Popover open={faseArtePopoverOpen} onOpenChange={setFaseArtePopoverOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="cursor-pointer transition-transform hover:scale-105 shrink-0"
-          title="Clique para alterar a fase da arte do designer"
-        >
-          {faseArteCfg ? (
-            <span
-              style={{
-                backgroundColor: hexToRgba(faseArteCfg.cor, 0.16),
-                color: faseArteCfg.cor,
-                borderColor: hexToRgba(faseArteCfg.cor, 0.38),
-              }}
-              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shadow-2xs"
-            >
-              <Globe size={12} />
-              {faseArteCfg.label}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-foreground/40 transition">
-              <Globe size={11} /> Fase da arte
-            </span>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-2 space-y-1" align="start">
-        <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Fase da Arte (Designer)</div>
-        {FASES_ARTE.map((f) => {
-          const isSelected = demanda.fase_arte === f.valor;
-          return (
-            <button
-              key={f.valor}
-              type="button"
-              onClick={() => {
-                onQuickUpdate?.(demanda, { fase_arte: f.valor });
-                setFaseArtePopoverOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md transition text-left ${
-                isSelected ? 'bg-accent font-semibold text-foreground' : 'hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: f.cor }} />
-                <div className="min-w-0">
-                  <div className="font-medium text-foreground truncate">{f.label}</div>
-                  <div className="text-[10px] text-muted-foreground truncate">{f.descricao}</div>
-                </div>
-              </div>
-              {isSelected && <Check size={13} className="text-foreground shrink-0 ml-1.5" />}
-            </button>
-          );
-        })}
-        {demanda.fase_arte && (
-          <button
-            type="button"
-            onClick={() => {
-              onQuickUpdate?.(demanda, { fase_arte: '' });
-              setFaseArtePopoverOpen(false);
-            }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-destructive hover:bg-destructive/10 rounded-md transition"
-          >
-            <X size={13} /> Limpar fase da arte
-          </button>
-        )}
-      </PopoverContent>
-    </Popover>
-  ) : faseArteCfg ? (
-    <span
-      style={{
-        backgroundColor: hexToRgba(faseArteCfg.cor, 0.16),
-        color: faseArteCfg.cor,
-        borderColor: hexToRgba(faseArteCfg.cor, 0.38),
-      }}
-      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shadow-2xs shrink-0"
-    >
-      <Globe size={12} />
-      {faseArteCfg.label}
-    </span>
-  ) : null;
-
-  // Elemento: Responsáveis (Designer / Vendedor / Revenda)
-  const responsaveisNode = canEdit ? (
-    <Popover open={responsaveisPopoverOpen} onOpenChange={(o) => {
-      if (o) setRespTemp({ designer: demanda.designer || '', vendedor: demanda.vendedor || '', revenda: demanda.revenda || '' });
-      setResponsaveisPopoverOpen(o);
-    }}>
-      <PopoverTrigger asChild>
-        <div
-          className="flex items-center gap-1.5 cursor-pointer py-0.5 rounded-md hover:opacity-85 transition text-xs text-muted-foreground flex-wrap"
-          title="Clique para editar responsáveis (Designer, Vendedor, Revenda)"
-        >
-          <span className="inline-flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded-md border border-border/40 transition">
-            <span className="text-muted-foreground/80 font-normal">Designer:</span>
-            <UserAvatar name={demanda.designer} size="xs" />
-            <strong className="font-semibold text-foreground">{demanda.designer || '—'}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded-md border border-border/40 transition">
-            <span className="text-muted-foreground/80 font-normal">Vendedor:</span>
-            <UserAvatar name={demanda.vendedor} size="xs" />
-            <strong className="font-semibold text-foreground">{demanda.vendedor || '—'}</strong>
-          </span>
-          {demanda.revenda && (
-            <span className="inline-flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded-md border border-border/40 transition">
-              <span className="text-muted-foreground/80 font-normal">Revenda:</span>
-              <UserAvatar name={demanda.revenda} size="xs" />
-              <strong className="font-semibold text-foreground">{demanda.revenda}</strong>
-            </span>
-          )}
-        </div>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-3 space-y-3" align="start">
-        <div className="font-semibold text-xs text-foreground pb-0.5 border-b">Responsáveis pela Demanda</div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={`des-${demanda.id}`} className="text-xs flex items-center gap-1.5">
-            <UserAvatar name={respTemp.designer} size="xs" /> Designer
-          </Label>
-          <Select
-            value={respTemp.designer || '__none__'}
-            onValueChange={(v) => setRespTemp((prev) => ({ ...prev, designer: v === '__none__' ? '' : v }))}
-          >
-            <SelectTrigger id={`des-${demanda.id}`} className="h-8 text-xs">
-              <SelectValue placeholder="Selecione o designer" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Nenhum / Não atribuído</SelectItem>
-              {designers.map((d) => {
-                const val = typeof d === 'object' ? d.value || d.nome : d;
-                const lbl = typeof d === 'object' ? d.label || d.nome : d;
-                const avatar = typeof d === 'object' ? d.avatar_url : undefined;
-                return (
-                  <SelectItem key={val} value={val}>
-                    <div className="flex items-center gap-2">
-                      <UserAvatar name={lbl} src={avatar} size="xs" />
-                      <span>{lbl}</span>
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={`ven-${demanda.id}`} className="text-xs flex items-center gap-1.5">
-            <UserAvatar name={respTemp.vendedor} size="xs" /> Vendedor
-          </Label>
-          <Select
-            value={respTemp.vendedor || '__none__'}
-            onValueChange={(v) => setRespTemp((prev) => ({ ...prev, vendedor: v === '__none__' ? '' : v }))}
-          >
-            <SelectTrigger id={`ven-${demanda.id}`} className="h-8 text-xs">
-              <SelectValue placeholder="Selecione o vendedor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Nenhum / Não atribuído</SelectItem>
-              {vendedores.map((v) => {
-                const val = typeof v === 'object' ? v.value || v.nome : v;
-                const lbl = typeof v === 'object' ? v.label || v.nome : v;
-                const avatar = typeof v === 'object' ? v.avatar_url : undefined;
-                return (
-                  <SelectItem key={val} value={val}>
-                    <div className="flex items-center gap-2">
-                      <UserAvatar name={lbl} src={avatar} size="xs" />
-                      <span>{lbl}</span>
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={`rev-${demanda.id}`} className="text-xs flex items-center gap-1.5">
-            <UserAvatar name={respTemp.revenda} size="xs" /> Revenda
-          </Label>
-          <Select
-            value={respTemp.revenda || '__none__'}
-            onValueChange={(v) => setRespTemp((prev) => ({ ...prev, revenda: v === '__none__' ? '' : v }))}
-          >
-            <SelectTrigger id={`rev-${demanda.id}`} className="h-8 text-xs">
-              <SelectValue placeholder="Selecione a revenda" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Nenhuma revenda</SelectItem>
-              {revendas.map((r) => {
-                const val = typeof r === 'object' ? r.value || r.nome : r;
-                const lbl = typeof r === 'object' ? r.label || r.nome : r;
-                const avatar = typeof r === 'object' ? r.avatar_url : undefined;
-                return (
-                  <SelectItem key={val} value={val}>
-                    <div className="flex items-center gap-2">
-                      <UserAvatar name={lbl} src={avatar} size="xs" />
-                      <span>{lbl}</span>
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex justify-end gap-1.5 pt-1">
-          <Button size="sm" variant="ghost" onClick={() => setResponsaveisPopoverOpen(false)} className="h-7 text-xs">Cancelar</Button>
-          <Button size="sm" onClick={salvarResponsaveis} className="h-7 text-xs">Salvar</Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  ) : (
-    <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
-      <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
-        <span className="text-muted-foreground/80 font-normal">Designer:</span>
-        <UserAvatar name={demanda.designer} size="xs" />
-        <strong className="font-semibold text-foreground">{demanda.designer || '—'}</strong>
-      </span>
-      <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
-        <span className="text-muted-foreground/80 font-normal">Vendedor:</span>
-        <UserAvatar name={demanda.vendedor} size="xs" />
-        <strong className="font-semibold text-foreground">{demanda.vendedor || '—'}</strong>
-      </span>
-      {demanda.revenda && (
-        <span className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded-md border border-border/40">
-          <span className="text-muted-foreground/80 font-normal">Revenda:</span>
-          <UserAvatar name={demanda.revenda} size="xs" />
-          <strong className="font-semibold text-foreground">{demanda.revenda}</strong>
-        </span>
-      )}
-    </div>
-  );
-
-  // Elemento: Ações do Topo (Enviar para Impressão / Concluir / Editar / Excluir)
-  const acoesNode = (
-    <div className="flex items-center gap-1.5 shrink-0">
-      {canEdit && (
-        <Button
-          variant="default"
-          size="icon"
-          onClick={() => onEnviarParaImpressao?.(demanda)}
-          className="h-7 w-7 bg-white text-black hover:bg-white/90 dark:bg-white dark:text-black dark:hover:bg-white/90 shadow-xs rounded-lg flex items-center justify-center cursor-pointer shrink-0"
-          title="Enviar demanda para a Fila de Impressão"
-          aria-label="Enviar para Impressão"
-        >
-          <Printer size={13} className="stroke-[2.5]" />
-        </Button>
-      )}
-      {canEdit && (
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => onConcluir(demanda)}
-          className="h-7 w-7 bg-background hover:bg-muted text-foreground border border-border/70 shadow-xs rounded-lg flex items-center justify-center cursor-pointer shrink-0"
-          title="Concluir demanda diretamente"
-          aria-label="Concluir"
-        >
-          <Check size={13} className="stroke-[2.5]" />
-        </Button>
-      )}
-      {canEdit && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onEdit(demanda)}
-          className="h-7 w-7 text-muted-foreground hover:text-foreground rounded-lg flex items-center justify-center cursor-pointer shrink-0"
-          title="Editar demanda completa"
-          aria-label="Editar"
-        >
-          <Pencil size={13} />
-        </Button>
-      )}
-      {canEdit && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onDelete(demanda)}
-          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg flex items-center justify-center cursor-pointer shrink-0"
-          title="Excluir demanda"
-          aria-label="Excluir"
-        >
-          <Trash2 size={13} />
-        </Button>
-      )}
-    </div>
-  );
-
-  // Elemento: Etapa
-  const etapaNode = (
-    <div className="flex items-center gap-1.5 text-xs min-w-0">
-      <span className="text-muted-foreground font-normal shrink-0">Etapa:</span>
-      {canEdit ? (
-        <Popover open={etapaPopoverOpen} onOpenChange={(o) => {
-          if (o) setEtapaTemp(demanda.demanda || '');
-          setEtapaPopoverOpen(o);
-        }}>
-          <PopoverTrigger asChild>
-            <span
-              className="text-foreground/90 font-normal cursor-pointer hover:text-primary transition hover:underline underline-offset-2 truncate"
-              title="Clique para editar a etapa diretamente"
-            >
-              {demanda.demanda || <span className="text-muted-foreground/60 italic">Nenhuma etapa definida</span>}
-            </span>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 p-3 space-y-2.5" align="start">
-            <Label htmlFor={`eta-${demanda.id}`} className="text-xs font-semibold">Editar etapa atual</Label>
-            <Input
-              id={`eta-${demanda.id}`}
-              value={etapaTemp}
-              onChange={(e) => setEtapaTemp(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && salvarEtapa()}
-              placeholder="O que precisa ser feito agora"
-              autoFocus
-            />
-            <div className="flex justify-end gap-1.5 pt-1">
-              <Button size="sm" variant="ghost" onClick={() => setEtapaPopoverOpen(false)} className="h-7 text-xs">Cancelar</Button>
-              <Button size="sm" onClick={salvarEtapa} className="h-7 text-xs">Salvar</Button>
-            </div>
-          </PopoverContent>
-        </Popover>
-      ) : (
-        <span className="text-foreground/90 font-normal truncate">
-          {demanda.demanda || <span className="text-muted-foreground/60 italic">Nenhuma etapa definida</span>}
-        </span>
-      )}
-    </div>
-  );
-
-  // Elemento: Observação
-  const observacaoNode = demanda.observacao ? (
-    <p className="text-xs text-muted-foreground/80 italic line-clamp-2 pt-0.5">
-      {demanda.observacao}
-    </p>
-  ) : null;
+  const numFormatado = String(index + 1).padStart(2, '0');
+  const isPrimeiraLinha = index === 0;
 
   return (
-    <>
-      <Draggable draggableId={demanda.id} index={index} isDragDisabled={dragDisabled || !canReorder}>
-        {(provided, snapshot) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.draggableProps}
-            className={`group relative rounded-2xl border bg-card p-3 sm:px-4 sm:py-3 transition-all duration-150 ${
-              destaque
-                ? 'border-foreground/40 shadow-sm ring-1 ring-foreground/10'
-                : 'border-border hover:border-foreground/20 shadow-xs'
-            } ${snapshot.isDragging ? 'shadow-xl ring-2 ring-foreground/20 z-50' : ''}`}
-          >
-            {destaque && (
-              <span className="absolute -top-2.5 left-4 inline-flex items-center rounded-full bg-white text-black font-extrabold text-[9.5px] px-3 py-0.5 tracking-wider uppercase shadow-md ring-1 ring-black/10 z-10">
-                PRÓXIMA TAREFA
+    <Draggable draggableId={demanda.id} index={index} isDragDisabled={dragDisabled || !canReorder}>
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          {...(canReorder && !dragDisabled ? provided.dragHandleProps : {})}
+          onClick={() => onSelectRow?.(demanda)}
+          className={`group relative flex items-center min-h-[68px] sm:min-h-[74px] px-3 sm:px-4 py-2 border-b border-border/60 transition-colors duration-150 select-none cursor-pointer ${
+            isSelected
+              ? 'bg-muted/80 border-primary/20'
+              : 'bg-card hover:bg-muted/40'
+          } ${
+            snapshot.isDragging ? 'bg-card shadow-2xl z-50 ring-1 ring-border rounded-lg' : ''
+          }`}
+        >
+          {/* Destaque discreto na lateral esquerda para a primeira linha ou selecionada */}
+          {(isPrimeiraLinha || isSelected) && (
+            <div
+              className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-r-xs ${
+                isSelected ? 'bg-primary shadow-[0_0_8px_rgba(0,0,0,0.15)] dark:shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'bg-[#f97316] shadow-[0_0_8px_rgba(249,115,22,0.3)]'
+              }`}
+            />
+          )}
+
+          {/* Grid de Colunas */}
+          <div className="w-full grid grid-cols-12 items-center gap-2 sm:gap-4 text-xs">
+            
+            {/* Coluna 1: # (Número) */}
+            <div className="col-span-1 sm:col-span-1 flex items-center min-w-0">
+              <span className="font-mono text-[13px] font-bold text-muted-foreground/80 tabular-nums">
+                {numFormatado}
               </span>
-            )}
+            </div>
 
-            {viewMode === 'grade' ? (
-              /* LAYOUT MODO GRADE */
-              <div className="flex flex-col justify-between h-full space-y-2.5">
-                {/* Linha Topo da Grade: Drag + Número + Ações */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {canReorder && (
-                      <button
-                        {...provided.dragHandleProps}
-                        disabled={dragDisabled}
-                        className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing disabled:cursor-default p-0.5 transition-colors"
-                        aria-label="Arrastar para reordenar"
-                      >
-                        <GripVertical size={16} />
-                      </button>
+            {/* Coluna 2: PRIORIDADE (Edição Direta) */}
+            <div className="col-span-2 sm:col-span-1 flex items-center min-w-0" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild disabled={!canEdit}>
+                  <button
+                    type="button"
+                    className="group/prio flex items-center gap-0.5 text-left font-bold text-[11px] uppercase tracking-wide hover:opacity-80 transition cursor-pointer disabled:cursor-default"
+                  >
+                    {prioridadeValor === 'urgente' ? (
+                      <span className="text-rose-500">URGENTE</span>
+                    ) : prioridadeValor === 'alta' ? (
+                      <span className="text-[#f97316]">ALTA</span>
+                    ) : (
+                      <span className="text-muted-foreground/70 font-medium">ROTINA</span>
                     )}
-                    {canReorder && <div className="h-4 w-px bg-border/80" />}
-                    <div className="font-bold tabular-nums text-sm text-foreground/90 leading-none">
-                      #{String(index + 1).padStart(2, '0')}
-                    </div>
-                  </div>
-                  {acoesNode}
-                </div>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[120px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-xl">
+                  <DropdownMenuItem onClick={() => onQuickUpdate?.(demanda, { etiqueta: 'Urgente' })} className="text-xs text-rose-500 dark:text-rose-400 font-bold py-1.5 px-2 cursor-pointer hover:bg-accent">
+                    URGENTE
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onQuickUpdate?.(demanda, { etiqueta: 'Alta' })} className="text-xs text-[#f97316] font-bold py-1.5 px-2 cursor-pointer hover:bg-accent">
+                    ALTA
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onQuickUpdate?.(demanda, { etiqueta: 'Rotina' })} className="text-xs text-muted-foreground font-medium py-1.5 px-2 cursor-pointer hover:bg-accent">
+                    ROTINA
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-                {/* Corpo do Card em Grade */}
-                <div className="space-y-2 flex-1 min-w-0">
-                  <div className="min-w-0">{clienteNode}</div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {etiquetaNode}
-                    {prazoNode}
-                    {statusNode}
-                    {faseArteNode}
-                  </div>
-                  <div className="min-w-0">{responsaveisNode}</div>
-                  <div className="min-w-0">{etapaNode}</div>
-                  {observacaoNode}
-                </div>
-
-                {/* Rodapé da Grade */}
-                <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
-                  {canEdit ? (
-                    <button
-                      type="button"
-                      onClick={() => setAlteracaoOpen(true)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    >
-                      <Plus size={13} /> Registrar alteração
-                    </button>
-                  ) : <div />}
-                  {canViewHistory && (
-                    <button
-                      type="button"
-                      onClick={() => setHistoricoModalOpen(true)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground/80 hover:text-foreground transition-colors cursor-pointer"
-                      title="Ver histórico"
-                    >
-                      <History size={13} /> Histórico ({demanda.historico?.length || 0})
-                    </button>
-                  )}
-                </div>
+            {/* Coluna 3: CLIENTE / DEMANDA */}
+            <div className="col-span-4 sm:col-span-3 min-w-0 pr-2">
+              <div
+                onClick={() => canEdit && onEdit?.(demanda)}
+                className="font-bold text-sm text-foreground truncate hover:text-primary cursor-pointer transition leading-tight"
+                title={demanda.cliente}
+              >
+                {demanda.cliente}
               </div>
-            ) : (
-              /* LAYOUT MODO LISTA (Distribuído exatamente como na imagem) */
-              <div className="flex flex-col gap-2">
-                {/* LINHA 1: Drag + Divisor + Número + Cliente + Badges inline ---------- Ações à direita */}
-                <div className="flex items-center justify-between gap-2.5 flex-wrap">
-                  <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-                    {/* Drag Handle */}
-                    {canReorder && (
-                      <button
-                        {...provided.dragHandleProps}
-                        disabled={dragDisabled}
-                        className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing disabled:cursor-default p-0.5 transition-colors"
-                        aria-label="Arrastar para reordenar"
-                      >
-                        <GripVertical size={16} />
-                      </button>
-                    )}
 
-                    {/* Divisor */}
-                    {canReorder && <div className="h-4 w-px bg-border/80" />}
-
-                    {/* Número */}
-                    <div className="font-bold tabular-nums text-base text-foreground leading-none">
-                      {String(index + 1).padStart(2, '0')}
-                    </div>
-
-                    {/* Cliente */}
-                    <div className="min-w-0 pr-1">
-                      {clienteNode}
-                    </div>
-
-                    {/* Badges Inline (Etiqueta, Prazo, Status, Fase da Arte) */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {etiquetaNode}
-                      {prazoNode}
-                      {statusNode}
-                      {faseArteNode}
-                    </div>
-                  </div>
-
-                  {/* Ações no canto superior direito */}
-                  <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                    {acoesNode}
-                  </div>
+              {isEditingTexto ? (
+                <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={textoEdit}
+                    onChange={(e) => setTextoEdit(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveTexto();
+                      if (e.key === 'Escape') handleCancelTexto();
+                    }}
+                    onBlur={handleSaveTexto}
+                    placeholder="Descreva a alteração..."
+                    className="w-full text-[11px] h-6 px-1.5 py-0.5 rounded bg-background border border-primary text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs font-medium"
+                  />
                 </div>
-
-                {/* LINHA 2: Responsáveis (Designer, Vendedor, Revenda) ---------- Histórico à direita */}
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="min-w-0">
-                    {responsaveisNode}
-                  </div>
-
-                  {canViewHistory && (
-                    <button
-                      type="button"
-                      onClick={() => setHistoricoModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground/80 hover:text-foreground transition-colors cursor-pointer ml-auto"
-                      title="Ver histórico de alterações deste lead"
-                    >
-                      <History size={13} /> Histórico ({demanda.historico?.length || 0})
-                    </button>
-                  )}
-                </div>
-
-                {/* LINHA 3: Etapa ---------- + Registrar nova alteração à direita */}
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="min-w-0 flex-1">
-                    {etapaNode}
-                  </div>
-
+              ) : (
+                <div
+                  onClick={(e) => {
+                    if (!canEdit) return;
+                    e.stopPropagation();
+                    setIsEditingTexto(true);
+                    setTextoEdit(demanda.demanda || '');
+                  }}
+                  className="group/sub flex items-center gap-1 text-[11px] text-muted-foreground/80 truncate mt-0.5 hover:text-foreground cursor-pointer transition-colors py-0.5 px-1 -mx-1 rounded hover:bg-muted/70"
+                  title={canEdit ? 'Clique para editar o texto/orientação' : subtituloDemanda || ''}
+                >
+                  <span className="truncate">
+                    {demanda.demanda && demanda.demanda.trim()
+                      ? demanda.demanda.trim()
+                      : (demanda.bitrix_id ? `Bitrix #${demanda.bitrix_id}` : (canEdit ? '+ Adicionar orientação' : '—'))}
+                  </span>
                   {canEdit && (
-                    <button
-                      type="button"
-                      onClick={() => setAlteracaoOpen(true)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0 ml-auto"
-                    >
-                      <Plus size={13} /> Registrar nova alteração
-                    </button>
+                    <Pencil size={10} className="opacity-0 group-hover/sub:opacity-80 transition-opacity shrink-0 text-muted-foreground ml-0.5" />
                   )}
                 </div>
+              )}
+            </div>
 
-                {/* Observação (se houver) */}
-                {observacaoNode}
-              </div>
-            )}
+            {/* Coluna 4: PRAZO (Edição Direta via Calendar Popover) */}
+            <div className="col-span-2 sm:col-span-1 flex flex-col justify-center min-w-0 leading-tight" onClick={(e) => e.stopPropagation()}>
+              <Popover open={prazoPopoverOpen} onOpenChange={setPrazoPopoverOpen}>
+                <PopoverTrigger asChild disabled={!canEdit}>
+                  <button
+                    type="button"
+                    className="flex flex-col text-left hover:opacity-80 transition cursor-pointer disabled:cursor-default"
+                  >
+                    {prazoTexto ? (
+                      <>
+                        <span
+                          className={`font-semibold text-xs ${
+                            prazoTexto.isHoje
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : prazoTexto.isVencido
+                              ? 'text-foreground'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          {prazoTexto.data}
+                        </span>
+                        {prazoTexto.status && (
+                          <span className="text-[10px] font-medium text-rose-600 dark:text-rose-400">
+                            {prazoTexto.status}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground/40 text-xs">—</span>
+                    )}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 bg-popover border-border text-popover-foreground" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={prazoDate}
+                    onSelect={handleSelectPrazo}
+                    locale={ptBR}
+                    initialFocus
+                    className="bg-popover text-popover-foreground rounded-lg"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Coluna 5: ETAPA (Edição Direta via Menu de Fases da Arte) */}
+            <div className="hidden md:flex md:col-span-3 lg:col-span-2 xl:col-span-2 items-center gap-2 min-w-0 pr-2" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild disabled={!canEdit}>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-left hover:opacity-80 transition cursor-pointer disabled:cursor-default max-w-full truncate"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: corEtapa }} />
+                    <span className="text-xs font-medium text-foreground truncate" title={nomeEtapa}>
+                      {nomeEtapa}
+                    </span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[180px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-xl">
+                  {FASES_ARTE.map((f) => (
+                    <DropdownMenuItem
+                      key={f.valor}
+                      onClick={() => onQuickUpdate?.(demanda, { fase_arte: f.valor })}
+                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center gap-2"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: f.cor }} />
+                      <span>{f.label}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Coluna 6: STATUS (Edição Direta via Menu de Status da Fila com cores destacadas) */}
+            <div className="hidden lg:flex lg:col-span-2 xl:col-span-2 items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild disabled={!canEdit}>
+                  <button
+                    type="button"
+                    className="text-left hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer disabled:cursor-default max-w-full truncate"
+                  >
+                    {status ? (
+                      <span
+                        style={getStatusBadgeStyle(status)}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shadow-xs hover:brightness-110 transition-all max-w-full truncate"
+                        title={status.nome}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 rounded-full shrink-0 animate-pulse"
+                          style={{ backgroundColor: getStatusColor(status) }}
+                        />
+                        <span className="truncate">{status.nome}</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium text-muted-foreground/60 italic">—</span>
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[190px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
+                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Alterar Status
+                  </div>
+                  {statuses.map((st) => {
+                    const cor = getStatusColor(st);
+                    const isSelected = status?.id === st.id;
+                    return (
+                      <DropdownMenuItem
+                        key={st.id}
+                        onClick={() => onQuickUpdate?.(demanda, { status_id: st.id })}
+                        className={`text-xs py-2 px-2.5 cursor-pointer hover:bg-accent flex items-center justify-between rounded-lg transition-colors my-0.5 ${
+                          isSelected ? 'bg-accent/80 font-semibold' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full shrink-0 shadow-xs"
+                            style={{ backgroundColor: cor }}
+                          />
+                          <span style={{ color: isSelected ? cor : undefined }}>{st.nome}</span>
+                        </div>
+                        {isSelected && <Check size={13} className="ml-2 shrink-0" style={{ color: cor }} />}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Coluna 7: D / V (Designer e Vendedor com Avatares e Tooltips) */}
+            <div className="hidden lg:flex lg:col-span-1 items-center justify-start gap-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+              {/* Designer Avatar */}
+              {demanda.designer ? (
+                <div
+                  className="cursor-pointer transition-transform hover:scale-115 active:scale-95 shrink-0"
+                  title={`Designer: ${demanda.designer}`}
+                >
+                  <UserAvatar
+                    name={demanda.designer}
+                    src={designerAvatar}
+                    size="xs"
+                    className="ring-1 ring-background shadow-xs hover:ring-primary"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="w-5 h-5 rounded-full border border-dashed border-border/80 flex items-center justify-center text-[9px] text-muted-foreground/50 font-semibold select-none shrink-0"
+                  title="Sem designer atribuído"
+                >
+                  D
+                </div>
+              )}
+
+              {/* Vendedor Avatar */}
+              {demanda.vendedor ? (
+                <div
+                  className="cursor-pointer transition-transform hover:scale-115 active:scale-95 shrink-0"
+                  title={`Vendedor: ${demanda.vendedor}`}
+                >
+                  <UserAvatar
+                    name={demanda.vendedor}
+                    src={vendedorAvatar}
+                    size="xs"
+                    className="ring-1 ring-background shadow-xs hover:ring-emerald-500"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="w-5 h-5 rounded-full border border-dashed border-border/80 flex items-center justify-center text-[9px] text-muted-foreground/50 font-semibold select-none shrink-0"
+                  title="Sem vendedor atribuído"
+                >
+                  V
+                </div>
+              )}
+            </div>
+
+            {/* Coluna 8: AÇÕES (Aparência discreta, alinhada e sem cortes) */}
+            <div className="col-span-3 sm:col-span-3 md:col-span-2 lg:col-span-1 xl:col-span-1 flex items-center justify-end gap-1.5 ml-auto shrink-0 flex-nowrap pr-0.5">
+              
+              {/* Botão Imprimir (Disponível em todas as demandas) */}
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEnviarParaImpressao?.(demanda);
+                  }}
+                  className="h-7 w-7 rounded-md bg-secondary/80 border-border text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer shrink-0"
+                  title="Enviar para Impressão"
+                >
+                  <Printer size={13} />
+                </Button>
+              )}
+
+              {/* Botão/Check de Concluir */}
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConcluir?.(demanda);
+                  }}
+                  className="h-7 w-7 rounded-md bg-secondary/80 border-border text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-secondary cursor-pointer shrink-0"
+                  title="Concluir demanda"
+                >
+                  <Check size={13} className="stroke-[2.5]" />
+                </Button>
+              )}
+
+              {/* Botão de Menu Overflow "..." */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7 rounded-md bg-secondary/80 border-border text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer shrink-0"
+                  >
+                    <MoreHorizontal size={13} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[160px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-2xl">
+                  {canEdit && (
+                    <DropdownMenuItem
+                      onClick={() => onEdit?.(demanda)}
+                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent"
+                    >
+                      <Pencil size={13} className="mr-2 text-muted-foreground" /> Editar
+                    </DropdownMenuItem>
+                  )}
+                  {canEdit && (
+                    <DropdownMenuItem
+                      onClick={() => onEnviarParaImpressao?.(demanda)}
+                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent"
+                    >
+                      <Printer size={13} className="mr-2 text-muted-foreground" /> Imprimir
+                    </DropdownMenuItem>
+                  )}
+                  {canEdit && (
+                    <DropdownMenuItem
+                      onClick={() => onRegistrarAlteracao?.(demanda)}
+                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent"
+                    >
+                      <Plus size={13} className="mr-2 text-muted-foreground stroke-[2.5]" /> Registrar alteração
+                    </DropdownMenuItem>
+                  )}
+                  {canEdit && (
+                    <DropdownMenuItem
+                      onClick={() => onDuplicar?.(demanda)}
+                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent"
+                    >
+                      <Copy size={13} className="mr-2 text-muted-foreground" /> Duplicar
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    onClick={() => onVerHistorico?.(demanda)}
+                    className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent"
+                  >
+                    <History size={13} className="mr-2 text-muted-foreground" /> Ver histórico
+                  </DropdownMenuItem>
+                  {canEdit && (
+                    <>
+                      <DropdownMenuSeparator className="bg-border" />
+                      <DropdownMenuItem
+                        onClick={() => onDelete?.(demanda)}
+                        className="text-xs py-1.5 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                      >
+                        <Trash2 size={13} className="mr-2" /> Excluir
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
           </div>
-        )}
-      </Draggable>
-
-      <RegistrarAlteracaoDialog
-        open={alteracaoOpen}
-        onClose={() => setAlteracaoOpen(false)}
-        onConfirm={async (novoTexto) => {
-          await onRegistrarAlteracao?.(demanda, novoTexto);
-          setAlteracaoOpen(false);
-        }}
-      />
-
-      <Dialog open={historicoModalOpen} onOpenChange={setHistoricoModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <History size={18} /> Histórico de Alterações
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Registro completo de movimentações da demanda de <strong className="text-foreground">{demanda.cliente}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <HistoricoPainel historico={demanda.historico} />
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      )}
+    </Draggable>
   );
 }

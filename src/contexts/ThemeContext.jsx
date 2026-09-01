@@ -63,8 +63,23 @@ export function ThemeProvider({
   const setTheme = (newTheme) => {
     try {
       localStorage.setItem(storageKey, newTheme);
-    } catch (e) {
-      console.warn('Falha ao salvar tema no localStorage:', e);
+    } catch {
+      try {
+        // Se a quota do storage estiver cheia, limpa chaves temporárias e tenta novamente
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('fluxo-fallback:') || k === 'fluxo-clientes:avatars' || k.startsWith('fluxo-clientes:legacy'))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => {
+          try { localStorage.removeItem(k); } catch {}
+        });
+        localStorage.setItem(storageKey, newTheme);
+      } catch {
+        // Silêncio seguro se o storage estiver desabilitado ou indisponível
+      }
     }
     setThemeState(newTheme);
   };

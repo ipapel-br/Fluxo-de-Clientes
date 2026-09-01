@@ -59,16 +59,16 @@ import {
   PERMISSOES_DEFINICAO,
   PERMISSOES_PADRAO_POR_PERFIL,
   getEffectivePermissions,
+  getUserRolesLabels,
 } from '@/lib/permissoes';
 import { formatarDataHistorico } from '@/lib/historico';
 
-const ROLE_ICONS = {
-  [PERFIS.ADMIN]: ShieldCheck,
-  [PERFIS.DESIGNER]: Palette,
-  [PERFIS.PRINTER]: Printer,
-  [PERFIS.SELLER]: ShoppingBag,
-  [PERFIS.CONSULTANT]: Briefcase,
-};
+const FUNCOES_OPERACIONAIS = [
+  { id: PERFIS.DESIGNER, label: 'Designer', icon: Palette, descricao: 'Recebe demandas e cria/edita as artes' },
+  { id: PERFIS.SELLER, label: 'Vendedor / Comercial', icon: ShoppingBag, descricao: 'Cadastra pedidos e atende clientes' },
+  { id: PERFIS.CONSULTANT, label: 'Consultor', icon: Briefcase, descricao: 'Gerencia revendas e demandas estratégicas' },
+  { id: PERFIS.PRINTER, label: 'Impressor', icon: Printer, descricao: 'Opera a fila de produção e impressão na fábrica' },
+];
 
 export default function Admin() {
   const {
@@ -96,7 +96,6 @@ export default function Admin() {
     return 'usuarios';
   });
   const [busca, setBusca] = useState('');
-  const [loading, setLoading] = useState(false);
   const [modalNovoOpen, setModalNovoOpen] = useState(false);
   const [modalEditarOpen, setModalEditarOpen] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
@@ -106,14 +105,16 @@ export default function Admin() {
   // Form de novo usuário
   const [novoNome, setNovoNome] = useState('');
   const [novoEmail, setNovoEmail] = useState('');
-  const [novoPerfil, setNovoPerfil] = useState(PERFIS.SELLER);
+  const [novoIsAdmin, setNovoIsAdmin] = useState(false);
+  const [novoRoles, setNovoRoles] = useState([PERFIS.DESIGNER]);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [erroNovo, setErroNovo] = useState('');
 
   // Form de edição de usuário
   const [editNome, setEditNome] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editPerfil, setEditPerfil] = useState(PERFIS.SELLER);
+  const [editIsAdmin, setEditIsAdmin] = useState(false);
+  const [editRoles, setEditRoles] = useState([PERFIS.DESIGNER]);
   const [editStatus, setEditStatus] = useState('ativo');
   const [editPermissoes, setEditPermissoes] = useState({});
   const [salvandoEdit, setSalvandoEdit] = useState(false);
@@ -185,7 +186,8 @@ export default function Admin() {
   function abrirNovoUsuario() {
     setNovoNome('');
     setNovoEmail('');
-    setNovoPerfil(PERFIS.SELLER);
+    setNovoIsAdmin(false);
+    setNovoRoles([PERFIS.DESIGNER]);
     setErroNovo('');
     setModalNovoOpen(true);
   }
@@ -193,13 +195,19 @@ export default function Admin() {
   // Submeter novo usuário
   async function handleCriarUsuario(e) {
     e.preventDefault();
+    if (novoRoles.length === 0) {
+      setErroNovo('Selecione pelo menos uma função operacional (ex: Designer ou Vendedor).');
+      return;
+    }
     setErroNovo('');
     setSalvandoNovo(true);
     try {
       const res = await adicionarUsuario({
         nome: novoNome,
         email: novoEmail,
-        role: novoPerfil,
+        role: novoRoles[0],
+        roles: novoRoles,
+        is_admin: novoIsAdmin,
       });
       if (!res.success) {
         setErroNovo(res.error || 'Erro ao cadastrar.');
@@ -217,7 +225,13 @@ export default function Admin() {
     setUsuarioEditando(u);
     setEditNome(u.nome || '');
     setEditEmail(u.email || '');
-    setEditPerfil(u.role || PERFIS.SELLER);
+    setEditIsAdmin(Boolean(u.is_admin || u.role === PERFIS.ADMIN));
+
+    const userRoles = Array.isArray(u.roles) && u.roles.length > 0
+      ? u.roles.filter((r) => r !== PERFIS.ADMIN)
+      : [u.role && u.role !== PERFIS.ADMIN ? u.role : PERFIS.DESIGNER];
+
+    setEditRoles(userRoles.length > 0 ? userRoles : [PERFIS.DESIGNER]);
     setEditStatus(u.status || 'ativo');
 
     // Calcular o estado atual das permissões do usuário
@@ -225,19 +239,6 @@ export default function Admin() {
     setEditPermissoes(effective);
     setErroEdit('');
     setModalEditarOpen(true);
-  }
-
-  // Quando o administrador muda o perfil na edição, redefinir checkboxes para o padrão daquele perfil
-  function handlePerfilChange(novoPerfilSelecionado) {
-    setEditPerfil(novoPerfilSelecionado);
-    const padrao = PERMISSOES_PADRAO_POR_PERFIL[novoPerfilSelecionado] || [];
-    const novoMapa = {};
-    PERMISSOES_DEFINICAO.forEach((grupo) => {
-      grupo.permissoes.forEach((p) => {
-        novoMapa[p.key] = novoPerfilSelecionado === PERFIS.ADMIN ? true : padrao.includes(p.key);
-      });
-    });
-    setEditPermissoes(novoMapa);
   }
 
   // Alternar permissão granular individual
@@ -251,11 +252,15 @@ export default function Admin() {
   // Salvar alterações do usuário
   async function handleSalvarEdicao() {
     if (!usuarioEditando) return;
+    if (editRoles.length === 0) {
+      setErroEdit('Selecione pelo menos uma função operacional (ex: Designer ou Vendedor).');
+      return;
+    }
     setErroEdit('');
     setSalvandoEdit(true);
 
-    // Calcular overrides (diferenças em relação ao padrão do perfil selecionado)
-    const padrao = PERMISSOES_PADRAO_POR_PERFIL[editPerfil] || [];
+    // Calcular overrides (diferenças em relação ao padrão dos perfis selecionados)
+    const padrao = editRoles.flatMap((r) => PERMISSOES_PADRAO_POR_PERFIL[r] || []);
     const permissoesExtras = {};
 
     PERMISSOES_DEFINICAO.forEach((grupo) => {
@@ -271,7 +276,9 @@ export default function Admin() {
     try {
       const res = await atualizarUsuario(usuarioEditando.id, {
         nome: editNome.trim(),
-        role: editPerfil,
+        role: editRoles[0],
+        roles: editRoles,
+        is_admin: editIsAdmin,
         status: editStatus,
         permissoes_extras: permissoesExtras,
       });
@@ -516,7 +523,6 @@ export default function Admin() {
                     </tr>
                   ) : (
                     usuariosFiltrados.map((u) => {
-                      const RoleIcon = ROLE_ICONS[u.role] || UserIcon;
                       const isAtivo = u.status === 'ativo';
 
                       // Cálculo de tempo real de acesso
@@ -538,9 +544,22 @@ export default function Admin() {
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted text-foreground/90 border border-border">
-                              <RoleIcon size={12} /> {PERFIS_LABELS[u.role] || u.role}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {getUserRolesLabels(u).map((lbl) => (
+                                <span
+                                  key={lbl}
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted text-foreground/90 border border-border"
+                                >
+                                  {lbl}
+                                </span>
+                              ))}
+
+                              {(u.is_admin || u.role === PERFIS.ADMIN) && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary/15 text-primary border border-primary/30 shadow-2xs">
+                                  <ShieldCheck size={12} /> Admin
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             {isAtivo ? (
@@ -859,40 +878,74 @@ export default function Admin() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Perfil Base</Label>
-              <Select value={novoPerfil} onValueChange={setNovoPerfil}>
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Selecione um perfil" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={PERFIS.SELLER}>
-                    <div className="flex items-center gap-2">
-                      <ShoppingBag size={14} /> Vendedor
-                    </div>
-                  </SelectItem>
-                  <SelectItem value={PERFIS.CONSULTANT}>
-                    <div className="flex items-center gap-2">
-                      <Briefcase size={14} /> Consultor
-                    </div>
-                  </SelectItem>
-                  <SelectItem value={PERFIS.DESIGNER}>
-                    <div className="flex items-center gap-2">
-                      <Palette size={14} /> Designer
-                    </div>
-                  </SelectItem>
-                  <SelectItem value={PERFIS.PRINTER}>
-                    <div className="flex items-center gap-2">
-                      <Printer size={14} /> Impressor
-                    </div>
-                  </SelectItem>
-                  <SelectItem value={PERFIS.ADMIN}>
-                    <div className="flex items-center gap-2 font-semibold text-primary">
-                      <ShieldCheck size={14} /> Administrador
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Acesso Administrador (Superusuário) */}
+            <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-1">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <Checkbox
+                  checked={novoIsAdmin}
+                  onCheckedChange={(checked) => setNovoIsAdmin(Boolean(checked))}
+                  className="mt-0.5"
+                />
+                <div>
+                  <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-primary" />
+                    <span>Acesso de Administrador (Superusuário)</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                    Concede controle total ao painel administrativo. Não aparece como cargo nas listas operacionais.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Funções Operacionais */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-foreground">
+                  Funções Operacionais no Fluxo *
+                </Label>
+                <span className="text-[10px] text-muted-foreground">Pode marcar mais de uma</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {FUNCOES_OPERACIONAIS.map((f) => {
+                  const FIcon = f.icon;
+                  const isSelected = novoRoles.includes(f.id);
+                  return (
+                    <label
+                      key={f.id}
+                      className={`flex items-start gap-2.5 p-2 rounded-xl border transition cursor-pointer select-none ${
+                        isSelected
+                          ? 'bg-primary/10 border-primary/50 text-foreground ring-1 ring-primary/20'
+                          : 'bg-card border-border hover:bg-muted/40 text-muted-foreground'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => {
+                          setNovoRoles((prev) => {
+                            if (prev.includes(f.id)) {
+                              const filtrado = prev.filter((r) => r !== f.id);
+                              return filtrado.length > 0 ? filtrado : [f.id];
+                            }
+                            return [...prev, f.id];
+                          });
+                        }}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <FIcon size={13} className="text-primary" />
+                          <span>{f.label}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                          {f.descricao}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
             <DialogFooter className="pt-3">
@@ -952,35 +1005,86 @@ export default function Admin() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Perfil Base</Label>
-                <Select value={editPerfil} onValueChange={handlePerfilChange}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Selecione o perfil" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={PERFIS.SELLER}>Vendedor</SelectItem>
-                    <SelectItem value={PERFIS.CONSULTANT}>Consultor</SelectItem>
-                    <SelectItem value={PERFIS.DESIGNER}>Designer</SelectItem>
-                    <SelectItem value={PERFIS.PRINTER}>Impressor</SelectItem>
-                    <SelectItem value={PERFIS.ADMIN}>Administrador</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-muted-foreground">
-                  Ao trocar o perfil base, as permissões padrão são carregadas automaticamente.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Status da Conta</Label>
                 <Select value={editStatus} onValueChange={setEditStatus}>
                   <SelectTrigger className="h-10">
                     <SelectValue placeholder="Selecione o status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ativo">Ativo</SelectItem>
+                    <SelectItem value="ativo">Ativo (Acesso Liberado)</SelectItem>
                     <SelectItem value="inativo">Inativo (Desativado)</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Acesso Administrador (Superusuário) */}
+            <div className="p-3.5 rounded-xl border border-primary/30 bg-primary/5 space-y-1">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <Checkbox
+                  checked={editIsAdmin}
+                  onCheckedChange={(checked) => setEditIsAdmin(Boolean(checked))}
+                  className="mt-0.5"
+                />
+                <div>
+                  <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-primary" />
+                    <span>Acesso de Administrador (Superusuário)</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                    Concede acesso irrestrito ao painel de administração e gestão de usuários. Não aparece como cargo nas listas operacionais de demandas.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Funções Operacionais */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-foreground">
+                  Funções Operacionais no Fluxo *
+                </Label>
+                <span className="text-[10px] text-muted-foreground">Pode marcar mais de uma</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {FUNCOES_OPERACIONAIS.map((f) => {
+                  const FIcon = f.icon;
+                  const isSelected = editRoles.includes(f.id);
+                  return (
+                    <label
+                      key={f.id}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                        isSelected
+                          ? 'bg-primary/10 border-primary/50 text-foreground ring-1 ring-primary/20'
+                          : 'bg-card border-border hover:bg-muted/40 text-muted-foreground'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => {
+                          setEditRoles((prev) => {
+                            if (prev.includes(f.id)) {
+                              const filtrado = prev.filter((r) => r !== f.id);
+                              return filtrado.length > 0 ? filtrado : [f.id];
+                            }
+                            return [...prev, f.id];
+                          });
+                        }}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <FIcon size={13} className="text-primary" />
+                          <span>{f.label}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                          {f.descricao}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -1009,9 +1113,9 @@ export default function Admin() {
                             className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition cursor-pointer"
                           >
                             <Checkbox
-                              checked={checado}
+                              checked={editIsAdmin ? true : checado}
                               onCheckedChange={() => togglePermissao(p.key)}
-                              disabled={editPerfil === PERFIS.ADMIN}
+                              disabled={editIsAdmin}
                               className="mt-0.5"
                             />
                             <div className="min-w-0 flex-1">

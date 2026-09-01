@@ -6,6 +6,7 @@ import {
   hasPermission as checkHasPermission,
   getEffectivePermissions,
   getInitialRouteForUser,
+  userHasRole,
 } from '@/lib/permissoes';
 import { syncAvatarsFromUsers, saveAvatar } from '@/lib/avatarService';
 
@@ -47,7 +48,8 @@ export function AuthProvider({ children }) {
       // Garantir que alan.d.santos2021@gmail.com tenha acesso admin e perfil designer/admin
       if (parsed && (parsed.email || '').toLowerCase().trim() === 'alan.d.santos2021@gmail.com') {
         parsed.is_admin = true;
-        if (!parsed.role) parsed.role = 'designer';
+        if (!parsed.role || parsed.role === 'admin') parsed.role = 'designer';
+        if (!parsed.roles || parsed.roles.length === 0) parsed.roles = ['designer'];
       }
       return parsed;
     } catch {
@@ -298,17 +300,26 @@ export function AuthProvider({ children }) {
       // Garantir que alan.d.santos2021@gmail.com sempre tenha is_admin = true e papel Designer (ou o selecionado)
       if (emailLimpo === 'alan.d.santos2021@gmail.com') {
         encontrado.is_admin = true;
-        if (encontrado.role === PERFIS.ADMIN) {
+        if (encontrado.role === PERFIS.ADMIN || !encontrado.role) {
           encontrado.role = PERFIS.DESIGNER;
+        }
+        if (!encontrado.roles || encontrado.roles.length === 0) {
+          encontrado.roles = [PERFIS.DESIGNER];
         }
         await localClient.entities.Usuario.update(encontrado.id, {
           is_admin: true,
-          role: encontrado.role || PERFIS.DESIGNER,
+          role: encontrado.role,
+          roles: encontrado.roles,
           last_access_at: agora,
         });
       } else {
         await localClient.entities.Usuario.update(encontrado.id, { last_access_at: agora });
       }
+
+      const rolePrincipal = encontrado.role && encontrado.role !== PERFIS.ADMIN ? encontrado.role : PERFIS.DESIGNER;
+      const rolesArray = Array.isArray(encontrado.roles) && encontrado.roles.length > 0
+        ? encontrado.roles.filter((r) => r !== PERFIS.ADMIN)
+        : [rolePrincipal];
 
       const dadosUsuario = {
         id: encontrado.id,
@@ -316,7 +327,8 @@ export function AuthProvider({ children }) {
         nome: encontrado.nome,
         email: encontrado.email,
         avatar_url: encontrado.avatar_url || '',
-        role: encontrado.role || PERFIS.DESIGNER,
+        role: rolePrincipal,
+        roles: rolesArray.length > 0 ? rolesArray : [rolePrincipal],
         is_admin: encontrado.is_admin || encontrado.role === PERFIS.ADMIN || emailLimpo === 'alan.d.santos2021@gmail.com',
         status: encontrado.status || 'ativo',
         permissoes_extras: encontrado.permissoes_extras || {},
@@ -347,9 +359,9 @@ export function AuthProvider({ children }) {
   /**
    * Adicionar usuário (Apenas Administrador)
    */
-  async function adicionarUsuario({ nome, email, role = PERFIS.SELLER, permissoes_extras = {} }) {
-    if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN) {
-      return { success: false, error: 'Você não tem permissão para gerenciar usuários.' };
+  async function adicionarUsuario({ nome, email, role, roles, is_admin, permissoes_extras }) {
+    if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN && !usuario?.is_admin) {
+      return { success: false, error: 'Você não tem permissão para adicionar usuários.' };
     }
 
     const nomeLimpo = (nome || '').trim();
@@ -369,6 +381,9 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Já existe um usuário com este e-mail cadastrado.' };
       }
 
+      const rolePrincipal = role || (Array.isArray(roles) && roles[0]) || PERFIS.SELLER;
+      const rolesArray = Array.isArray(roles) && roles.length > 0 ? roles : [rolePrincipal];
+
       // Se Supabase configurado, pode disparar convite via Supabase Auth
       let authUserId = null;
       if (isSupabaseConfigured && supabase) {
@@ -377,7 +392,7 @@ export function AuthProvider({ children }) {
           const { error: inviteError } = await supabase.auth.signInWithOtp({
             email: emailLimpo,
             options: {
-              data: { nome: nomeLimpo, role },
+              data: { nome: nomeLimpo, role: rolePrincipal, roles: rolesArray, is_admin: Boolean(is_admin) },
             },
           });
           if (inviteError) {
@@ -391,7 +406,9 @@ export function AuthProvider({ children }) {
       const novo = await localClient.entities.Usuario.create({
         nome: nomeLimpo,
         email: emailLimpo,
-        role: role || PERFIS.SELLER,
+        role: rolePrincipal,
+        roles: rolesArray,
+        is_admin: Boolean(is_admin),
         status: 'ativo',
         permissoes_extras: permissoes_extras || {},
         auth_user_id: authUserId,
@@ -403,7 +420,7 @@ export function AuthProvider({ children }) {
         novo.id,
         null,
         novo,
-        `${usuario?.nome || 'Admin'} adicionou o usuário ${nomeLimpo} (${role})`
+        `${usuario?.nome || 'Admin'} adicionou o usuário ${nomeLimpo} (${rolesArray.join(', ')})`
       );
 
       await carregarUsuariosEConfig();
@@ -574,23 +591,23 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Listas de usuários ativos categorizados estritamente por papel base
+  // Listas de usuários ativos categorizados por papéis operacionais
   const vendedoresCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && (u.role === PERFIS.SELLER || u.role === PERFIS.CONSULTANT))
-      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
+      .filter((u) => u.status === 'ativo' && (userHasRole(u, PERFIS.SELLER) || userHasRole(u, PERFIS.CONSULTANT)))
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles }));
   }, [usuariosLista]);
 
   const designersCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && u.role === PERFIS.DESIGNER)
-      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
+      .filter((u) => u.status === 'ativo' && userHasRole(u, PERFIS.DESIGNER))
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles }));
   }, [usuariosLista]);
 
   const impressoresCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && u.role === PERFIS.PRINTER)
-      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role }));
+      .filter((u) => u.status === 'ativo' && userHasRole(u, PERFIS.PRINTER))
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles }));
   }, [usuariosLista]);
 
   /**

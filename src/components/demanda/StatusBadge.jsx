@@ -1,20 +1,25 @@
-import { hexToRgba } from '@/lib/statusColors';
+import { getStatusColor, getStatusBadgeStyle } from '@/lib/statusColors';
 
-export default function StatusBadge({ status }) {
+export default function StatusBadge({ status, size = 'sm', className = '' }) {
   if (!status) {
     return <span className="text-xs text-muted-foreground italic">Sem status</span>;
   }
-  const cor = status.cor || '#64748b';
+  const cor = getStatusColor(status);
+  const style = getStatusBadgeStyle(status);
+  const nome = typeof status === 'string' ? status : status.nome || 'Status';
+
   return (
     <span
-      style={{
-        backgroundColor: hexToRgba(cor, 0.14),
-        color: cor,
-        borderColor: hexToRgba(cor, 0.28),
-      }}
-      className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+      style={style}
+      className={`inline-flex items-center gap-1.5 rounded-full border font-semibold whitespace-nowrap shadow-xs transition-all ${
+        size === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-xs'
+      } ${className}`}
     >
-      {status.nome}
+      <span
+        className="h-1.5 w-1.5 rounded-full shrink-0 animate-pulse"
+        style={{ backgroundColor: cor }}
+      />
+      <span className="truncate">{nome}</span>
     </span>
   );
 }

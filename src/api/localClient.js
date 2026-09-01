@@ -24,7 +24,7 @@ const defaultStatuses = () => {
     { id: 'status_criacao', nome: 'Criação', cor: '#f59e0b', concluido: false, ordem: 1, created_date: timestamp, updated_date: timestamp },
     { id: 'status_revisao', nome: 'Revisão', cor: '#f97316', concluido: false, ordem: 2, created_date: timestamp, updated_date: timestamp },
     { id: 'status_amostra', nome: 'Amostra', cor: '#06b6d4', concluido: false, ordem: 3, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_impressao', nome: 'Impressão', cor: '#64748b', concluido: false, ordem: 4, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_impressao', nome: 'Impressão', cor: '#8b5cf6', concluido: false, ordem: 4, created_date: timestamp, updated_date: timestamp },
     { id: 'status_concluido', nome: 'Concluído', cor: '#22c55e', concluido: true, ordem: 5, created_date: timestamp, updated_date: timestamp },
   ];
 };
@@ -37,6 +37,7 @@ const defaultUsuarios = () => {
       nome: 'Alan Santos',
       email: 'alan.d.santos2021@gmail.com',
       role: 'designer',
+      roles: ['designer'],
       is_admin: true,
       status: 'ativo',
       permissoes_extras: {},
@@ -49,6 +50,7 @@ const defaultUsuarios = () => {
       nome: 'Grace Helen',
       email: 'grace@fluxodeclientes.com',
       role: 'consultant',
+      roles: ['consultant', 'seller'],
       status: 'ativo',
       permissoes_extras: {},
       created_date: timestamp,
@@ -59,7 +61,8 @@ const defaultUsuarios = () => {
       id: 'usuario_admin_master',
       nome: 'Administrador',
       email: 'admin@fluxodeclientes.com',
-      role: 'admin',
+      role: 'designer',
+      roles: ['designer', 'seller'],
       is_admin: true,
       status: 'ativo',
       permissoes_extras: {},
@@ -74,12 +77,111 @@ const defaultConfiguracao = () => [
   { id: 'config_geral', seller_view_mode: 'all', updated_at: now() },
 ];
 
+const defaultDemandas = () => {
+  const timestamp = now();
+  return [
+    {
+      id: 'demanda_01_luise',
+      cliente: 'Luise Torres',
+      demanda: 'Recriando arte dos quadros',
+      etiqueta: 'alta',
+      prazo: '2026-08-31', // Hoje
+      fase_arte: 'iniciando',
+      designer: '',
+      vendedor: 'Lucas Cavalcante',
+      revenda: 'iPapel',
+      status_id: 'status_criacao',
+      ordem: 0,
+      design_position: 0,
+      factory_position: 0,
+      factory_status: 'pendente_design',
+      created_date: timestamp,
+      updated_date: timestamp,
+    },
+    {
+      id: 'demanda_02_colecao',
+      cliente: 'COLEÇÃO - Nathaly',
+      demanda: 'Tenho mais três durante a semana',
+      etiqueta: 'urgente',
+      prazo: '2026-08-28', // Vencido
+      fase_arte: 'no_meio',
+      designer: 'Alan Oliveira',
+      vendedor: 'Marlon Oliveira',
+      revenda: 'Papelée',
+      status_id: 'status_criacao',
+      ordem: 1,
+      design_position: 1,
+      factory_position: 1,
+      factory_status: 'pendente_design',
+      created_date: timestamp,
+      updated_date: timestamp,
+    },
+    {
+      id: 'demanda_03_raimundo',
+      cliente: 'Raimundo de Araújo Rocha',
+      demanda: 'Bitrix #18929',
+      bitrix_id: '18929',
+      etiqueta: 'alta',
+      prazo: '2026-08-31', // Hoje
+      fase_arte: '',
+      designer: 'Alan Santos',
+      vendedor: 'Joice Castro',
+      revenda: '',
+      status_id: 'status_impressao',
+      ordem: 2,
+      design_position: 2,
+      factory_position: 2,
+      factory_status: 'aguardando',
+      created_date: timestamp,
+      updated_date: timestamp,
+    },
+    {
+      id: 'demanda_04_lenara',
+      cliente: 'Lenara Celes Gama Vasconcelos',
+      demanda: 'Bitrix #18913',
+      bitrix_id: '18913',
+      etiqueta: 'alta',
+      prazo: '2026-06-05', // Vencido
+      fase_arte: '',
+      designer: 'Alan Santos',
+      vendedor: 'Joice Castro',
+      revenda: '',
+      status_id: 'status_impressao',
+      ordem: 3,
+      design_position: 3,
+      factory_position: 3,
+      factory_status: 'aguardando',
+      created_date: timestamp,
+      updated_date: timestamp,
+    },
+    {
+      id: 'demanda_05_excelencia',
+      cliente: 'Excelência Lingerie',
+      demanda: '',
+      etiqueta: 'alta',
+      prazo: '2026-08-28', // Vencido
+      fase_arte: '',
+      designer: 'Alan Santos',
+      vendedor: 'Joice Castro',
+      revenda: '',
+      status_id: 'status_impressao',
+      ordem: 4,
+      design_position: 4,
+      factory_position: 4,
+      factory_status: 'aguardando',
+      created_date: timestamp,
+      updated_date: timestamp,
+    },
+  ];
+};
+
 const defaultRevendas = () => [
   { id: 'revenda_ipapel', nome: 'iPapel', logo_url: '' },
+  { id: 'revenda_papelee', nome: 'Papelée', logo_url: '' },
 ];
 
 const initialState = () => ({
-  demandas: [],
+  demandas: defaultDemandas(),
   statuses: defaultStatuses(),
   usuarios: defaultUsuarios(),
   revendas: defaultRevendas(),
@@ -89,11 +191,15 @@ const initialState = () => ({
 });
 
 function normalizeState(value) {
-  const demandas = Array.isArray(value?.demandas)
+  let demandas = Array.isArray(value?.demandas)
     ? value.demandas.map(normalizeDemanda)
     : Array.isArray(value?.data?.Demanda)
       ? value.data.Demanda.map(normalizeDemanda)
       : [];
+
+  if (demandas.length === 0) {
+    demandas = defaultDemandas().map(normalizeDemanda);
+  }
   const statuses = Array.isArray(value?.statuses)
     ? value.statuses
     : Array.isArray(value?.data?.Status)
@@ -214,10 +320,26 @@ function writeState(state) {
   inMemoryState = state;
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
+      // Limita logs de auditoria e notificações para evitar estouro de quota
+      if (state.audit_logs && state.audit_logs.length > 200) {
+        state.audit_logs = state.audit_logs.slice(-200);
+      }
+      if (state.notificacoes && state.notificacoes.length > 200) {
+        state.notificacoes = state.notificacoes.slice(-200);
+      }
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
-  } catch {
-    // Storage access blocked (e.g. iframe, third-party cookies disabled)
+  } catch (err) {
+    try {
+      if (state.audit_logs) state.audit_logs = state.audit_logs.slice(-50);
+      if (state.notificacoes) state.notificacoes = state.notificacoes.slice(-50);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem('fluxo-clientes:avatars');
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
+    } catch {
+      console.warn('[localClient] Armazenamento local cheio, mantido em memória:', err);
+    }
   }
 }
 

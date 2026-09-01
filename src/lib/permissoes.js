@@ -117,6 +117,38 @@ export const PERMISSOES_PADRAO_POR_PERFIL = {
 /**
  * Verifica se um usuário possui uma determinada permissão.
  * @param {object} usuario Objeto do usuário autenticado
+/**
+ * Verifica se o usuário possui determinado papel (função operacional)
+ * @param {object} usuario 
+ * @param {string} targetRole 
+ * @returns {boolean}
+ */
+export function userHasRole(usuario, targetRole) {
+  if (!usuario) return false;
+  if (usuario.role === targetRole) return true;
+  if (Array.isArray(usuario.roles) && usuario.roles.includes(targetRole)) return true;
+  return false;
+}
+
+/**
+ * Retorna as funções ativas de um usuário em formato de lista legível
+ * @param {object} usuario 
+ * @returns {string[]}
+ */
+export function getUserRolesLabels(usuario) {
+  if (!usuario) return [];
+  const roles = Array.isArray(usuario.roles) && usuario.roles.length > 0
+    ? usuario.roles
+    : [usuario.role || PERFIS.SELLER];
+  
+  return roles
+    .filter((r) => r !== PERFIS.ADMIN)
+    .map((r) => PERFIS_LABELS[r] || r);
+}
+
+/**
+ * Verifica se o usuário tem permissão para uma ação específica
+ * @param {object} usuario Objeto do usuário autenticado
  * @param {string} permissionKey Chave da permissão
  * @returns {boolean}
  */
@@ -130,9 +162,12 @@ export function hasPermission(usuario, permissionKey) {
   if (extras[permissionKey] === true) return true;
   if (extras[permissionKey] === false) return false;
 
-  // 2. Fallback para permissões padrão do perfil
-  const role = usuario.role || PERFIS.SELLER;
-  const padrao = PERMISSOES_PADRAO_POR_PERFIL[role] || [];
+  // 2. Fallback para permissões padrão do perfil ou papéis múltiplos
+  const userRoles = Array.isArray(usuario.roles) && usuario.roles.length > 0
+    ? usuario.roles
+    : [usuario.role || PERFIS.SELLER];
+
+  const padrao = userRoles.flatMap((r) => PERMISSOES_PADRAO_POR_PERFIL[r] || []);
   return padrao.includes(permissionKey);
 }
 
@@ -146,8 +181,11 @@ export function getEffectivePermissions(usuario) {
   if (!usuario) return result;
 
   const isAdmin = usuario.role === PERFIS.ADMIN || usuario.is_admin;
-  const role = usuario.role || PERFIS.SELLER;
-  const padrao = PERMISSOES_PADRAO_POR_PERFIL[role] || [];
+  const userRoles = Array.isArray(usuario.roles) && usuario.roles.length > 0
+    ? usuario.roles
+    : [usuario.role || PERFIS.SELLER];
+
+  const padrao = userRoles.flatMap((r) => PERMISSOES_PADRAO_POR_PERFIL[r] || []);
   const extras = usuario.permissoes_extras || {};
 
   PERMISSOES_DEFINICAO.forEach((grupo) => {

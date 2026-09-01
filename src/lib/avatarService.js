@@ -21,7 +21,12 @@ function safeSetStorage(data) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
   } catch {
-    // Silencia erros de storage
+    // Se quota excedida, limpa chaves legadas e armazena apenas cache essencial
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {}
   }
 }
 
@@ -41,10 +46,7 @@ export function syncAvatarsFromUsers(users = []) {
     if (u && u.avatar_url) {
       if (u.nome) {
         map[String(u.nome).trim().toLowerCase()] = u.avatar_url;
-        const primeiroNome = String(u.nome).trim().split(/\s+/)[0].toLowerCase();
-        if (primeiroNome) map[primeiroNome] = u.avatar_url;
       }
-      if (u.email) map[String(u.email).trim().toLowerCase()] = u.avatar_url;
       if (u.id) map[String(u.id).trim().toLowerCase()] = u.avatar_url;
     }
   });
@@ -106,7 +108,7 @@ export function subscribeAvatars(callback) {
   };
 }
 
-// Comprime imagem para avatar 128x128 em formato WebP/JPEG leve
+// Comprime imagem para avatar 96x96 em formato WebP/JPEG super leve (~2KB a 4KB)
 export function processAvatarFile(file) {
   return new Promise((resolve, reject) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -119,7 +121,7 @@ export function processAvatarFile(file) {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const size = 128;
+        const size = 96;
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
@@ -130,7 +132,10 @@ export function processAvatarFile(file) {
         const sy = (img.height - minDim) / 2;
 
         ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
-        const dataUrl = canvas.toDataURL('image/webp', 0.85);
+        let dataUrl = canvas.toDataURL('image/webp', 0.75);
+        if (!dataUrl.startsWith('data:image/webp')) {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        }
         resolve(dataUrl);
       };
       img.onerror = () => reject(new Error('Erro ao processar a imagem.'));

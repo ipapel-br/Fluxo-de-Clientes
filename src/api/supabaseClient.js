@@ -189,8 +189,15 @@ export function createSupabaseEntityApi(entityName) {
         .range(skip, skip + limit - 1);
 
       if (error) {
-        if (error.code === 'PGRST205' || error.message?.includes('schema cache') || error.message?.includes('not found')) {
-          console.warn(`[Supabase] Tabela '${table}' não encontrada no banco. Usando armazenamento local temporário.`);
+        if (
+          error.code === 'PGRST205' ||
+          error.code === '57014' ||
+          error.message?.includes('schema cache') ||
+          error.message?.includes('not found') ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('canceling statement')
+        ) {
+          console.warn(`[Supabase] Tabela '${table}' inacessível ou tempo limite atingido (${error.message || error.code}). Usando armazenamento local temporário.`);
           const rows = fallbackStorage.list(table);
           if (entityName === 'Demanda') return rows.map(normalizeDemanda);
           if (entityName === 'Usuario') return rows.map(normalizeUsuario);
@@ -251,8 +258,13 @@ export function createSupabaseEntityApi(entityName) {
           continue;
         }
 
-        if (error.code === 'PGRST205' || error.message?.toLowerCase().includes("could not find the table")) {
-          console.warn(`[Supabase] Tabela '${table}' ainda não foi criada no banco remoto. Salvando no armazenamento local temporário.`);
+        if (
+          error.code === 'PGRST205' ||
+          error.code === '57014' ||
+          error.message?.toLowerCase().includes("could not find the table") ||
+          error.message?.includes('timeout')
+        ) {
+          console.warn(`[Supabase] Tabela '${table}' ainda não foi criada no banco remoto ou tempo limite atingido. Salvando no armazenamento local temporário.`);
           return fallbackStorage.create(table, currentPayload);
         }
 
@@ -301,8 +313,13 @@ export function createSupabaseEntityApi(entityName) {
           continue;
         }
 
-        if (error.code === 'PGRST205' || error.message?.toLowerCase().includes("could not find the table")) {
-          console.warn(`[Supabase] Tabela '${table}' ainda não foi criada no banco remoto. Atualizando no armazenamento local temporário.`);
+        if (
+          error.code === 'PGRST205' ||
+          error.code === '57014' ||
+          error.message?.toLowerCase().includes("could not find the table") ||
+          error.message?.includes('timeout')
+        ) {
+          console.warn(`[Supabase] Tabela '${table}' ainda não foi criada no banco remoto ou tempo limite atingido. Atualizando no armazenamento local temporário.`);
           return fallbackStorage.update(table, id, currentPayload);
         }
 

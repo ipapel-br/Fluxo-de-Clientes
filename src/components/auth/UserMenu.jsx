@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { User, LogOut, ShieldCheck, Palette, Printer, ShoppingBag, Camera, Sun, Moon, Monitor } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { PERFIS, PERFIS_LABELS } from '@/lib/permissoes';
+import { PERFIS, PERFIS_LABELS, getUserRolesLabels } from '@/lib/permissoes';
+import { processAvatarFile } from '@/lib/avatarService';
 
 const ROLE_ICONS = {
   [PERFIS.ADMIN]: ShieldCheck,
@@ -14,10 +16,13 @@ const ROLE_ICONS = {
 };
 
 export default function UserMenu() {
-  const { usuario, logout, setLoginModalOpen, atualizarAvatar } = useAuth();
+  const { usuario, logout, setLoginModalOpen, atualizarAvatar, can } = useAuth();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef(null);
+
+  const showAdmin = can ? (can('users_manage') || can('revendas_manage') || usuario?.role === 'admin' || usuario?.is_admin) : false;
 
   if (!usuario?.nome) {
     return (
@@ -32,7 +37,8 @@ export default function UserMenu() {
     );
   }
 
-  const roleLabel = PERFIS_LABELS[usuario.role] || 'Colaborador';
+  const roleLabelsList = getUserRolesLabels(usuario);
+  const roleLabel = roleLabelsList.length > 0 ? roleLabelsList.join(', ') : (PERFIS_LABELS[usuario.role] || 'Colaborador');
   const RoleIcon = ROLE_ICONS[usuario.role] || User;
 
   const iniciais = usuario.nome
@@ -42,25 +48,17 @@ export default function UserMenu() {
     .map((p) => p[0].toUpperCase())
     .join('');
 
-  const hasAvatar = Boolean(usuario.avatar_url);
-
-  function handleFileChange(e) {
+  async function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    // Limit to 500KB
-    if (file.size > 512000) {
-      alert('A imagem deve ter no máximo 500KB.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const base64 = ev.target?.result;
+    try {
+      const base64 = await processAvatarFile(file);
       if (base64 && atualizarAvatar) {
-        atualizarAvatar(base64);
+        await atualizarAvatar(base64);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Erro ao processar imagem de avatar:', err);
+    }
   }
 
   return (
@@ -173,6 +171,18 @@ export default function UserMenu() {
         </div>
 
         <div className="space-y-1 pt-1 border-t border-border">
+          {showAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate('/admin');
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted rounded-md transition cursor-pointer"
+            >
+              <ShieldCheck size={13} className="text-primary" /> Painel de Administração
+            </button>
+          )}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}

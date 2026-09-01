@@ -77,7 +77,9 @@ export async function emitirNotificacao({
   try {
     const autorNome = autor?.nome || 'Alguém';
     const autorEmail = autor?.email || '';
-    const autorAvatar = autor?.avatar_url || '';
+    const rawAvatar = autor?.avatar_url || '';
+    // Evita salvar strings base64 pesadas no payload de notificações para não sobrecarregar o banco
+    const autorAvatar = rawAvatar.startsWith('data:') || rawAvatar.length > 500 ? '' : rawAvatar;
     const autorId = autor?.id || '';
 
     // Se não especificado alvos customizados, calcula baseado na demanda

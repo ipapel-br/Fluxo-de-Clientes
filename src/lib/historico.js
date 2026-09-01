@@ -48,7 +48,41 @@ export function entradaPrazo(de, para, usuario, data = agoraIso()) {
     texto: `Prazo alterado de ${fmt(de)} para ${fmt(para)}`,
     data,
     tipo: 'prazo',
+    prazo_antigo: de,
+    prazo_novo: para,
     usuario: usuario ? { nome: usuario.nome, email: usuario.email } : null,
+  };
+}
+
+export function entradaAlteracaoPrazo({ de, para, dias = 0, motivo = '', usuario, data = agoraIso() }) {
+  const fmt = (v) => {
+    if (!v) return 'sem prazo';
+    try {
+      const parts = String(v).split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return format(new Date(v), 'dd/MM/yyyy', { locale: ptBR });
+    } catch {
+      return v;
+    }
+  };
+
+  const deStr = fmt(de);
+  const paraStr = fmt(para);
+  const sufixoDias = dias > 0 ? ` (+${dias} ${dias === 1 ? 'dia' : 'dias'})` : dias < 0 ? ` (${dias} dias)` : '';
+  const motivoTexto = motivo ? ` · Motivo: ${motivo}` : '';
+
+  return {
+    texto: `Prazo alterado de ${deStr} para ${paraStr}${sufixoDias}${motivoTexto}`,
+    descricao: `Prazo estendido${sufixoDias}: ${deStr} ➔ ${paraStr}`,
+    data,
+    tipo: 'prazo',
+    prazo_antigo: de,
+    prazo_novo: para,
+    dias_ajustados: dias,
+    motivo: motivo || '',
+    usuario: usuario ? { nome: usuario.nome, email: usuario.email, avatar_url: usuario.avatar_url } : null,
   };
 }
 
