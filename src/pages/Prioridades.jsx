@@ -1,8 +1,38 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
-import { Plus, FileSpreadsheet, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import {
+  Plus,
+  FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Filter,
+  Check,
+  X,
+  Palette,
+  ShoppingBag,
+  Building2,
+  Calendar,
+  Flame,
+  AlertTriangle,
+  Layers,
+  Search,
+  Clock,
+  Sparkles,
+  User as UserIcon,
+} from 'lucide-react';
 import { localClient } from '@/api/localClient';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import UserAvatar from '@/components/ui/UserAvatar';
+import { getStatusColor } from '@/lib/statusColors';
 import DemandaItem from '@/components/demanda/DemandaItem';
 import DemandaDrawer from '@/components/demanda/DemandaDrawer';
 import DemandaForm from '@/components/demanda/DemandaForm';
@@ -218,6 +248,7 @@ export default function Prioridades() {
     filtros.status ||
     filtros.prioridade ||
     filtros.etapa ||
+    filtros.prazo ||
     sortConfig.key !== 'ordem'
   );
 
@@ -265,13 +296,25 @@ export default function Prioridades() {
       );
     }
     if (filtros.designer && filtros.designer !== '__all__') {
-      result = result.filter((d) => d.designer === filtros.designer);
+      if (filtros.designer === '__none__') {
+        result = result.filter((d) => !d.designer || d.designer.trim() === '');
+      } else {
+        result = result.filter((d) => (d.designer || '').toLowerCase().trim() === filtros.designer.toLowerCase().trim());
+      }
     }
     if (filtros.vendedor && filtros.vendedor !== '__all__') {
-      result = result.filter((d) => d.vendedor === filtros.vendedor);
+      if (filtros.vendedor === '__none__') {
+        result = result.filter((d) => !d.vendedor || d.vendedor.trim() === '');
+      } else {
+        result = result.filter((d) => (d.vendedor || '').toLowerCase().trim() === filtros.vendedor.toLowerCase().trim());
+      }
     }
     if (filtros.revenda && filtros.revenda !== '__all__') {
-      result = result.filter((d) => d.revenda === filtros.revenda);
+      if (filtros.revenda === '__none__') {
+        result = result.filter((d) => !d.revenda || d.revenda.trim() === '');
+      } else {
+        result = result.filter((d) => (d.revenda || '').toLowerCase().trim() === filtros.revenda.toLowerCase().trim());
+      }
     }
     if (filtros.status && filtros.status !== '__all__') {
       if (filtros.status === 'abertas') {
@@ -288,7 +331,23 @@ export default function Prioridades() {
       }
     }
     if (filtros.etapa && filtros.etapa !== '__all__') {
-      result = result.filter((d) => d.fase_arte === filtros.etapa);
+      result = result.filter((d) => (d.fase_arte || '').toLowerCase() === filtros.etapa.toLowerCase());
+    }
+    if (filtros.prazo && filtros.prazo !== '__all__') {
+      if (filtros.prazo === 'hoje') {
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo) === 'hoje');
+      } else if (filtros.prazo === 'atrasadas' || filtros.prazo === 'vencido') {
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo) === 'vencido');
+      } else if (filtros.prazo === 'esta_semana') {
+        result = result.filter((d) => {
+          const t = tipoAlertaPrazo(d.prazo);
+          return t === 'hoje' || t === 'proximo';
+        });
+      } else if (filtros.prazo === 'com_data') {
+        result = result.filter((d) => Boolean(d.prazo || d.data_especifica));
+      } else if (filtros.prazo === 'sem_data') {
+        result = result.filter((d) => !d.prazo && !d.data_especifica);
+      }
     }
 
     // Ordenação por colunas da tabela
@@ -393,6 +452,69 @@ export default function Prioridades() {
       label: nome,
     }));
   }, [revendasCadastradas, demandas]);
+
+  const [dvTab, setDvTab] = useState('designer');
+
+  // Contadores de demandas por categoria para os Popovers de filtro no cabeçalho
+  const designerDemandCounts = useMemo(() => {
+    const map = {};
+    ativas.forEach((d) => {
+      const k = (d.designer || '').toLowerCase().trim();
+      if (k) map[k] = (map[k] || 0) + 1;
+      else map['__none__'] = (map['__none__'] || 0) + 1;
+    });
+    return map;
+  }, [ativas]);
+
+  const vendedorDemandCounts = useMemo(() => {
+    const map = {};
+    ativas.forEach((d) => {
+      const k = (d.vendedor || '').toLowerCase().trim();
+      if (k) map[k] = (map[k] || 0) + 1;
+      else map['__none__'] = (map['__none__'] || 0) + 1;
+    });
+    return map;
+  }, [ativas]);
+
+  const statusDemandCounts = useMemo(() => {
+    const map = {};
+    ativas.forEach((d) => {
+      if (d.status_id) map[d.status_id] = (map[d.status_id] || 0) + 1;
+    });
+    return map;
+  }, [ativas]);
+
+  const prioridadeDemandCounts = useMemo(() => {
+    const map = { urgente: 0, alta: 0, rotina: 0 };
+    ativas.forEach((d) => {
+      const k = (d.etiqueta || 'rotina').toLowerCase();
+      if (map[k] !== undefined) map[k]++;
+      else map.rotina++;
+    });
+    return map;
+  }, [ativas]);
+
+  const etapaDemandCounts = useMemo(() => {
+    const map = { iniciando: 0, no_meio: 0, finalizando: 0 };
+    ativas.forEach((d) => {
+      const k = (d.fase_arte || '').toLowerCase();
+      if (map[k] !== undefined) map[k]++;
+    });
+    return map;
+  }, [ativas]);
+
+  const prazoDemandCounts = useMemo(() => {
+    const map = { hoje: 0, atrasadas: 0, esta_semana: 0, com_data: 0, sem_data: 0 };
+    ativas.forEach((d) => {
+      const t = tipoAlertaPrazo(d.prazo);
+      if (t === 'hoje') map.hoje++;
+      if (t === 'vencido') map.atrasadas++;
+      if (t === 'hoje' || t === 'proximo') map.esta_semana++;
+      if (d.prazo || d.data_especifica) map.com_data++;
+      else map.sem_data++;
+    });
+    return map;
+  }, [ativas]);
 
   // Demanda selecionada para o Drawer lateral
   const demandaSelecionadaObj = useMemo(() => {
@@ -845,8 +967,9 @@ export default function Prioridades() {
           /* Tabela Principal */
           <div className="space-y-3">
             <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
-              {/* 1. Cabeçalho da tabela com colunas alinhadas: #, PRIORIDADE, CLIENTE / DEMANDA, PRAZO, ETAPA, STATUS, D / V, AÇÕES */}
+              {/* 1. Cabeçalho da tabela com colunas e menus de filtro interativos: #, PRIORIDADE, CLIENTE / DEMANDA, PRAZO, ETAPA, STATUS, D / V, AÇÕES */}
               <div className="w-full grid grid-cols-12 items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 bg-muted/40 border-b border-border text-[11px] font-bold text-muted-foreground/80 uppercase tracking-wider select-none">
+                {/* 1. # (Ordem) */}
                 <div
                   onClick={() => handleSort('ordem')}
                   className="col-span-1 flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
@@ -855,54 +978,659 @@ export default function Prioridades() {
                   <span>#</span>
                   {getSortIcon('ordem')}
                 </div>
-                <div
-                  onClick={() => handleSort('prioridade')}
-                  className="col-span-2 sm:col-span-1 flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
-                  title="Ordenar por Prioridade (Urgente > Alta > Rotina)"
-                >
-                  <span>PRIORIDADE</span>
-                  {getSortIcon('prioridade')}
-                </div>
-                <div
-                  onClick={() => handleSort('cliente')}
-                  className="col-span-4 sm:col-span-3 flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
-                  title="Ordenar por Cliente / Demanda"
-                >
-                  <span>CLIENTE / DEMANDA</span>
-                  {getSortIcon('cliente')}
-                </div>
-                <div
-                  onClick={() => handleSort('prazo')}
-                  className="col-span-2 sm:col-span-1 flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
-                  title="Ordenar por Prazo"
-                >
-                  <span>PRAZO</span>
-                  {getSortIcon('prazo')}
-                </div>
-                <div
-                  onClick={() => handleSort('etapa')}
-                  className="hidden md:flex md:col-span-3 lg:col-span-2 xl:col-span-2 items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
-                  title="Ordenar por Etapa"
-                >
-                  <span>ETAPA</span>
-                  {getSortIcon('etapa')}
-                </div>
-                <div
-                  onClick={() => handleSort('status')}
-                  className="hidden lg:flex lg:col-span-2 xl:col-span-2 items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
-                  title="Ordenar por Status"
-                >
-                  <span>STATUS</span>
-                  {getSortIcon('status')}
-                </div>
-                <div
-                  onClick={() => handleSort('responsavel')}
-                  className="hidden lg:flex lg:col-span-1 items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
-                  title="Designer / Vendedor (D / V)"
-                >
-                  <span>D / V</span>
-                  {getSortIcon('responsavel')}
-                </div>
+
+                {/* 2. PRIORIDADE */}
+                <Popover>
+                  <div className="col-span-2 sm:col-span-1 flex items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.prioridade ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Prioridade"
+                      >
+                        <span>PRIORIDADE</span>
+                        {filtros.prioridade ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            1
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('prioridade'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por prioridade"
+                    >
+                      {getSortIcon('prioridade')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-60 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Flame size={13} className="text-primary" /> Filtrar Prioridade
+                      </span>
+                      {filtros.prioridade && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, prioridade: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prioridade: '' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          !filtros.prioridade ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span>Todas as prioridades</span>
+                        <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prioridade: 'urgente' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prioridade === 'urgente' ? 'bg-destructive/15 text-destructive font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" /> Urgente
+                        </span>
+                        <span className="text-[10px] opacity-70">({prioridadeDemandCounts.urgente || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prioridade: 'alta' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prioridade === 'alta' ? 'bg-amber-500/15 text-amber-600 font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-amber-500" /> Alta Prioridade
+                        </span>
+                        <span className="text-[10px] opacity-70">({prioridadeDemandCounts.alta || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prioridade: 'rotina' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prioridade === 'rotina' ? 'bg-muted font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-muted-foreground/40" /> Rotina
+                        </span>
+                        <span className="text-[10px] opacity-70">({prioridadeDemandCounts.rotina || 0})</span>
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* 3. CLIENTE / DEMANDA */}
+                <Popover>
+                  <div className="col-span-4 sm:col-span-3 flex items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.busca || filtros.revenda ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Cliente ou Revenda"
+                      >
+                        <span>CLIENTE / DEMANDA</span>
+                        {filtros.busca || filtros.revenda ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            {Boolean(filtros.busca) + Boolean(filtros.revenda)}
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('cliente'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por cliente A-Z"
+                    >
+                      {getSortIcon('cliente')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-72 p-2.5 text-xs space-y-2.5 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Search size={13} className="text-primary" /> Filtrar Cliente / Demanda
+                      </span>
+                      {(filtros.busca || filtros.revenda) && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, busca: '', revenda: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Busca rápida */}
+                    <div className="relative">
+                      <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        value={filtros.busca}
+                        onChange={(e) => setFiltros((prev) => ({ ...prev, busca: e.target.value }))}
+                        placeholder="Buscar por cliente ou pedido..."
+                        className="h-8 pl-7 text-xs"
+                      />
+                    </div>
+
+                    {/* Filtro por Revenda */}
+                    {revendas.length > 0 && (
+                      <div className="space-y-1 pt-1 border-t border-border">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+                          <Building2 size={11} /> Revenda Parceira
+                        </div>
+                        <div className="max-h-36 overflow-y-auto space-y-0.5 pr-1">
+                          <button
+                            type="button"
+                            onClick={() => setFiltros((prev) => ({ ...prev, revenda: '' }))}
+                            className={`w-full flex items-center justify-between px-2 py-1 rounded text-left transition ${
+                              !filtros.revenda ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                            }`}
+                          >
+                            <span>Todas as revendas</span>
+                            {!filtros.revenda && <Check size={11} className="text-primary" />}
+                          </button>
+                          {revendas.map((r) => {
+                            const rNome = r.nome || r.value || r.label;
+                            const isSel = (filtros.revenda || '').toLowerCase().trim() === rNome.toLowerCase().trim();
+                            return (
+                              <button
+                                key={r.id || rNome}
+                                type="button"
+                                onClick={() => setFiltros((prev) => ({ ...prev, revenda: isSel ? '' : rNome }))}
+                                className={`w-full flex items-center justify-between px-2 py-1 rounded text-left transition ${
+                                  isSel ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <UserAvatar name={rNome} src={r.logo_url} size="xs" />
+                                  <span className="truncate">{rNome}</span>
+                                </div>
+                                {isSel && <Check size={11} className="text-primary shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+
+                {/* 4. PRAZO */}
+                <Popover>
+                  <div className="col-span-2 sm:col-span-1 flex items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.prazo ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Prazo de Entrega"
+                      >
+                        <span>PRAZO</span>
+                        {filtros.prazo ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            1
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('prazo'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por prazo"
+                    >
+                      {getSortIcon('prazo')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-60 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Clock size={13} className="text-primary" /> Filtrar Prazo
+                      </span>
+                      {filtros.prazo && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, prazo: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prazo: '' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          !filtros.prazo ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span>Todos os prazos</span>
+                        <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prazo: 'atrasadas' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prazo === 'atrasadas' ? 'bg-destructive/15 text-destructive font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <AlertTriangle size={12} className="text-destructive" /> Atrasadas / Vencidas
+                        </span>
+                        <span className="text-[10px] opacity-70">({prazoDemandCounts.atrasadas || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prazo: 'hoje' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prazo === 'hoje' ? 'bg-amber-500/15 text-amber-600 font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Flame size={12} className="text-amber-500" /> Vencem Hoje
+                        </span>
+                        <span className="text-[10px] opacity-70">({prazoDemandCounts.hoje || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prazo: 'esta_semana' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prazo === 'esta_semana' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Calendar size={12} className="text-primary" /> Esta Semana
+                        </span>
+                        <span className="text-[10px] opacity-70">({prazoDemandCounts.esta_semana || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prazo: 'com_data' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prazo === 'com_data' ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>Com data definida</span>
+                        <span className="text-[10px] opacity-70">({prazoDemandCounts.com_data || 0})</span>
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* 5. ETAPA */}
+                <Popover>
+                  <div className="hidden md:flex md:col-span-3 lg:col-span-2 xl:col-span-2 items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.etapa ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Etapa da Arte"
+                      >
+                        <span>ETAPA</span>
+                        {filtros.etapa ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            1
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('etapa'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por etapa"
+                    >
+                      {getSortIcon('etapa')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-60 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Layers size={13} className="text-primary" /> Filtrar Etapa
+                      </span>
+                      {filtros.etapa && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, etapa: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: '' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          !filtros.etapa ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span>Todas as etapas</span>
+                        <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'iniciando' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'iniciando' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>🎨 Fase 1 (Iniciando)</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.iniciando || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'no_meio' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'no_meio' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>✏️ Fase 2 (Ajustes / Em andamento)</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.no_meio || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'finalizando' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'finalizando' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>✨ Fase 3 (Finalizando)</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.finalizando || 0})</span>
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* 6. STATUS */}
+                <Popover>
+                  <div className="hidden lg:flex lg:col-span-2 xl:col-span-2 items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.status ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Status"
+                      >
+                        <span>STATUS</span>
+                        {filtros.status ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            1
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('status'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por status"
+                    >
+                      {getSortIcon('status')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-68 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Sparkles size={13} className="text-primary" /> Filtrar Status
+                      </span>
+                      {filtros.status && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, status: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, status: '' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          !filtros.status ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span>Todos os status</span>
+                        <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      {statuses.map((st) => {
+                        const cor = getStatusColor(st);
+                        const isSel = filtros.status === st.id;
+                        const count = statusDemandCounts[st.id] || 0;
+                        return (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => setFiltros((prev) => ({ ...prev, status: isSel ? '' : st.id }))}
+                            className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                              isSel ? 'bg-primary/10 text-foreground font-bold border border-primary/20' : 'hover:bg-muted/60 text-foreground'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cor }} />
+                              <span className="truncate">{st.nome}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] opacity-70">({count})</span>
+                              {isSel && <Check size={11} className="text-primary" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* 7. D / V (DESIGNER / VENDEDOR) */}
+                <Popover>
+                  <div className="hidden lg:flex lg:col-span-1 items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.designer || filtros.vendedor ? 'text-primary font-extrabold' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Designer ou Vendedor"
+                      >
+                        <span>D / V</span>
+                        {filtros.designer || filtros.vendedor ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            {Boolean(filtros.designer) + Boolean(filtros.vendedor)}
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('responsavel'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por responsáveis"
+                    >
+                      {getSortIcon('responsavel')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-76 p-2.5 text-xs space-y-2.5 bg-popover border-border shadow-md" align="end">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        Filtrar Responsável
+                      </span>
+                      {(filtros.designer || filtros.vendedor) && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, designer: '', vendedor: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Alternância de Abas Designer / Vendedor */}
+                    <div className="grid grid-cols-2 p-0.5 bg-muted rounded-lg text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setDvTab('designer')}
+                        className={`py-1 px-2 rounded-md transition flex items-center justify-center gap-1.5 ${
+                          dvTab === 'designer' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <Palette size={12} className={dvTab === 'designer' ? 'text-primary' : ''} />
+                        <span>Designer</span>
+                        {filtros.designer && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDvTab('vendedor')}
+                        className={`py-1 px-2 rounded-md transition flex items-center justify-center gap-1.5 ${
+                          dvTab === 'vendedor' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <ShoppingBag size={12} className={dvTab === 'vendedor' ? 'text-primary' : ''} />
+                        <span>Vendedor</span>
+                        {filtros.vendedor && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                      </button>
+                    </div>
+
+                    {/* Conteúdo da aba selecionada */}
+                    {dvTab === 'designer' ? (
+                      <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, designer: '' }))}
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                            !filtros.designer ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                          }`}
+                        >
+                          <span>Todos os designers</span>
+                          {!filtros.designer && <Check size={11} className="text-primary" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, designer: '__none__' }))}
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                            filtros.designer === '__none__' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-muted-foreground'
+                          }`}
+                        >
+                          <span className="italic text-muted-foreground">Sem designer atribuído</span>
+                          <span className="text-[10px] opacity-70">({designerDemandCounts['__none__'] || 0})</span>
+                        </button>
+
+                        {designers.map((d) => {
+                          const dNome = d.nome || d.value || d.label;
+                          const isSel = (filtros.designer || '').toLowerCase().trim() === dNome.toLowerCase().trim();
+                          const count = designerDemandCounts[dNome.toLowerCase().trim()] || 0;
+                          return (
+                            <button
+                              key={d.id || dNome}
+                              type="button"
+                              onClick={() => setFiltros((prev) => ({ ...prev, designer: isSel ? '' : dNome }))}
+                              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                                isSel ? 'bg-primary/10 text-primary font-bold border border-primary/20' : 'hover:bg-muted/60 text-foreground'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <UserAvatar name={dNome} src={d.avatar_url} size="xs" />
+                                <span className="truncate">{dNome}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[10px] opacity-70">({count})</span>
+                                {isSel && <Check size={11} className="text-primary" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, vendedor: '' }))}
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                            !filtros.vendedor ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                          }`}
+                        >
+                          <span>Todos os vendedores</span>
+                          {!filtros.vendedor && <Check size={11} className="text-primary" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, vendedor: '__none__' }))}
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                            filtros.vendedor === '__none__' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-muted-foreground'
+                          }`}
+                        >
+                          <span className="italic text-muted-foreground">Sem vendedor atribuído</span>
+                          <span className="text-[10px] opacity-70">({vendedorDemandCounts['__none__'] || 0})</span>
+                        </button>
+
+                        {vendedores.map((v) => {
+                          const vNome = v.nome || v.value || v.label;
+                          const isSel = (filtros.vendedor || '').toLowerCase().trim() === vNome.toLowerCase().trim();
+                          const count = vendedorDemandCounts[vNome.toLowerCase().trim()] || 0;
+                          return (
+                            <button
+                              key={v.id || vNome}
+                              type="button"
+                              onClick={() => setFiltros((prev) => ({ ...prev, vendedor: isSel ? '' : vNome }))}
+                              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                                isSel ? 'bg-primary/10 text-primary font-bold border border-primary/20' : 'hover:bg-muted/60 text-foreground'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <UserAvatar name={vNome} src={v.avatar_url} size="xs" />
+                                <span className="truncate">{vNome}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[10px] opacity-70">({count})</span>
+                                {isSel && <Check size={11} className="text-primary" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+
+                {/* 8. AÇÕES */}
                 <div className="col-span-3 sm:col-span-3 md:col-span-2 lg:col-span-1 xl:col-span-1 text-right pr-1">
                   AÇÕES
                 </div>
