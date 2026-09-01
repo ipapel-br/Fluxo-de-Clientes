@@ -74,7 +74,8 @@ export default function NotificationBell() {
   const carregarNotificacoes = useCallback(async () => {
     if (!usuario) return;
     try {
-      const list = await localClient.entities.Notificacao.list('-created_at', 100);
+      // Limite leve de 20 notificações para economizar tráfego de rede (egress)
+      const list = await localClient.entities.Notificacao.list('-created_at', 20);
       setNotificacoes(list || []);
     } catch (err) {
       console.error('Erro ao carregar notificações:', err);
@@ -90,12 +91,24 @@ export default function NotificationBell() {
     window.addEventListener('fluxo-clientes:notificacao-criada', handleCreated);
     window.addEventListener('fluxo-clientes:notificacao-atualizada', handleUpdated);
 
-    // Polling a cada 15 segundos para atualizar badges se houver novos eventos
-    const interval = setInterval(carregarNotificacoes, 15000);
+    // Polling inteligente: apenas a cada 60s e SOMENTE se a aba do navegador estiver visível
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        carregarNotificacoes();
+      }
+    }, 60000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        carregarNotificacoes();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('fluxo-clientes:notificacao-criada', handleCreated);
       window.removeEventListener('fluxo-clientes:notificacao-atualizada', handleUpdated);
+      document.removeEventListener('visibilitychange', handleVisibility);
       clearInterval(interval);
     };
   }, [carregarNotificacoes]);

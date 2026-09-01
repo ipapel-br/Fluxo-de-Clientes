@@ -140,14 +140,17 @@ export default function Admin() {
     }
   }, [recarregarUsuarios]);
 
-  // Polling automático a cada 15s na aba de usuários para manter o último acesso sempre real
+  // Recarrega usuários ao focar na aba
   useEffect(() => {
     if (abaAtiva === 'usuarios') {
       recarregarUsuarios();
-      const interval = setInterval(() => {
-        recarregarUsuarios();
-      }, 15000);
-      return () => clearInterval(interval);
+      const handleVisibility = () => {
+        if (document.visibilityState === 'visible') {
+          recarregarUsuarios();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibility);
+      return () => document.removeEventListener('visibilitychange', handleVisibility);
     }
   }, [abaAtiva, recarregarUsuarios]);
 
