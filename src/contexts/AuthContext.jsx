@@ -501,7 +501,7 @@ export function AuthProvider({ children }) {
    * Excluir usuário permanentemente
    */
   async function excluirUsuario(id) {
-    if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN) {
+    if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN && !usuario?.is_admin) {
       return { success: false, error: 'Você não tem permissão para excluir usuários.' };
     }
 
@@ -523,8 +523,8 @@ export function AuthProvider({ children }) {
       }
 
       // Proteção 3: Não permitir excluir o único administrador ativo
-      const adminsAtivos = users.filter((u) => u.role === PERFIS.ADMIN && u.status === 'ativo' && u.id !== id);
-      if (alvo.role === PERFIS.ADMIN && adminsAtivos.length === 0) {
+      const adminsAtivos = users.filter((u) => (u.role === PERFIS.ADMIN || u.is_admin) && u.status === 'ativo' && u.id !== id);
+      if ((alvo.role === PERFIS.ADMIN || alvo.is_admin) && adminsAtivos.length === 0) {
         return { success: false, error: 'Não é permitido excluir o único Administrador ativo do sistema.' };
       }
 
