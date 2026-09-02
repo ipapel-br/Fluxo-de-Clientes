@@ -20,12 +20,14 @@ import RegistrarAlteracaoDialog from './RegistrarAlteracaoDialog';
 import { ETIQUETAS, etiquetaConfig } from '@/lib/etiquetas';
 import { FASES_ARTE, faseArteConfig } from '@/lib/progressoArte';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
+import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
 import { ACABAMENTOS } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
 
 const VAZIO = {
   cliente: '',
   demanda: '',
+  tipo_demanda: '',
   revenda: '',
   vendedor: '',
   designer: '',
@@ -63,6 +65,7 @@ export default function DemandaForm({
         ? {
             cliente: demanda.cliente || '',
             demanda: demanda.demanda || '',
+            tipo_demanda: demanda.tipo_demanda || '',
             revenda: demanda.revenda || '',
             vendedor: demanda.vendedor || '',
             designer: demanda.designer || '',
@@ -271,6 +274,46 @@ export default function DemandaForm({
                   );
                 })}
                 {!form.fase_arte && <span className="text-xs text-muted-foreground self-center">Não iniciada</span>}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>Demanda (Tipo de Projeto)</Label>
+                {form.tipo_demanda && (
+                  <span className="text-[11px] text-muted-foreground font-normal">
+                    {tipoDemandaConfig(form.tipo_demanda)?.nomeCompleto}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {TIPOS_DEMANDA.map((t) => {
+                  const selecionada = form.tipo_demanda === t.valor;
+                  return (
+                    <button
+                      key={t.valor}
+                      type="button"
+                      onClick={() => set('tipo_demanda', selecionada ? '' : t.valor)}
+                      title={`${t.nomeCompleto} - ${t.descricao}`}
+                      style={
+                        selecionada
+                          ? {
+                              backgroundColor: hexToRgba(t.cor, 0.16),
+                              color: t.cor,
+                              borderColor: hexToRgba(t.cor, 0.4),
+                            }
+                          : undefined
+                      }
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                        selecionada ? 'ring-1 ring-primary/20 shadow-2xs' : 'border-input text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full mr-1.5 shrink-0" style={{ backgroundColor: t.cor }} />
+                      {t.curto}
+                    </button>
+                  );
+                })}
+                {!form.tipo_demanda && <span className="text-xs text-muted-foreground self-center">Não definida</span>}
               </div>
             </div>
 

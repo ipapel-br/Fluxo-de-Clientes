@@ -3,6 +3,8 @@
  * para o formato de demandas do Fluxo de Clientes.
  */
 
+import { tipoDemandaConfig } from './tiposDemanda';
+
 /**
  * Converte linhas de CSV (com separador ';' ou ',') em array de objetos
  */
@@ -365,11 +367,18 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [], u
 
       const observacao = obsPartes.join(' | ');
 
+      // Tipo de Demanda (A. COR, REDIMENSIONAR, P. DO ZERO, SHUTTER/BANCO)
+      const detectadoTipo = tipoDemandaConfig(
+        `${demandaEtapa} ${row['Tipo de Produto'] || ''} ${row['Informações Extras e Detalhamento'] || ''} ${row['Obs'] || ''}`
+      );
+      const tipo_demanda = detectadoTipo ? detectadoTipo.valor : '';
+
       return {
         importId: `bitrix_${bitrixId || index}`,
         bitrix_id: bitrixId,
         cliente,
         demanda: demandaEtapa,
+        tipo_demanda,
         prazo,
         designer,
         designer_id,

@@ -70,6 +70,7 @@ import {
 import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
 import { tipoAlertaPrazo, calcularScorePrazoProximo } from '@/lib/datas';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
+import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
 
 export default function Prioridades() {
   const {
@@ -96,6 +97,7 @@ export default function Prioridades() {
     revenda: '',
     designer: '',
     status: '',
+    tipo_demanda: '',
     prioridade: '',
     complexidade: '',
     etapa: '',
@@ -332,6 +334,7 @@ export default function Prioridades() {
     filtros.revenda ||
     filtros.designer ||
     filtros.status ||
+    filtros.tipo_demanda ||
     filtros.prioridade ||
     filtros.etapa ||
     filtros.prazo ||
@@ -410,6 +413,12 @@ export default function Prioridades() {
         result = result.filter((d) => d.status_id === filtros.status);
       }
     }
+    if (filtros.tipo_demanda && filtros.tipo_demanda !== '__all__') {
+      result = result.filter((d) => {
+        const cfg = tipoDemandaConfig(d.tipo_demanda || d.demanda);
+        return cfg && cfg.valor === filtros.tipo_demanda.toLowerCase();
+      });
+    }
     if (filtros.prioridade && filtros.prioridade !== '__all__') {
       if (filtros.prioridade === 'alta_urgente') {
         result = result.filter((d) => ['alta', 'urgente'].includes((d.etiqueta || '').toLowerCase()));
@@ -487,6 +496,13 @@ export default function Prioridades() {
           const sA = statusMap[a.status_id]?.ordem ?? 99;
           const sB = statusMap[b.status_id]?.ordem ?? 99;
           const diff = sA - sB;
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      } else if (sortConfig.key === 'tipo_demanda') {
+        result = [...result].sort((a, b) => {
+          const cfgA = tipoDemandaConfig(a.tipo_demanda || a.demanda)?.curto || '';
+          const cfgB = tipoDemandaConfig(b.tipo_demanda || b.demanda)?.curto || '';
+          const diff = cfgA.localeCompare(cfgB, 'pt-BR', { sensitivity: 'base' });
           return sortConfig.direction === 'asc' ? diff : -diff;
         });
       } else if (sortConfig.key === 'responsavel') {
@@ -603,6 +619,17 @@ export default function Prioridades() {
     const map = {};
     ativas.forEach((d) => {
       if (d.status_id) map[d.status_id] = (map[d.status_id] || 0) + 1;
+    });
+    return map;
+  }, [ativas]);
+
+  const tipoDemandaDemandCounts = useMemo(() => {
+    const map = { alteracao_cor: 0, redimensionar: 0, personalizacao_zero: 0, shutter_banco: 0 };
+    ativas.forEach((d) => {
+      const cfg = tipoDemandaConfig(d.tipo_demanda || d.demanda);
+      if (cfg && map[cfg.valor] !== undefined) {
+        map[cfg.valor]++;
+      }
     });
     return map;
   }, [ativas]);
@@ -1083,6 +1110,7 @@ export default function Prioridades() {
       const payload = {
         cliente: item.cliente,
         demanda: item.demanda || '',
+        tipo_demanda: item.tipo_demanda || '',
         prazo: item.prazo || '',
         designer: item.designer || '',
         designer_id: item.designer_id || null,
@@ -1948,7 +1976,94 @@ export default function Prioridades() {
                   </PopoverContent>
                 </Popover>
 
-                {/* 6. ETAPA */}
+                {/* 6. DEMANDA (Tipo / Briefing do Projeto) */}
+                <Popover>
+                  <div className="hidden lg:flex lg:col-span-1 items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.tipo_demanda ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Demanda (Escopo / Criação)"
+                      >
+                        <span>DEMANDA</span>
+                        {filtros.tipo_demanda ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            1
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('tipo_demanda'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por demanda"
+                    >
+                      {getSortIcon('tipo_demanda')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-68 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Layers size={13} className="text-primary" /> Filtrar Demanda
+                      </span>
+                      {filtros.tipo_demanda && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, tipo_demanda: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, tipo_demanda: '' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition cursor-pointer ${
+                          !filtros.tipo_demanda ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span>Todas as demandas</span>
+                        <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      {TIPOS_DEMANDA.map((t) => {
+                        const isSel = (filtros.tipo_demanda || '').toLowerCase() === t.valor;
+                        const count = tipoDemandaDemandCounts[t.valor] || 0;
+                        return (
+                          <button
+                            key={t.valor}
+                            type="button"
+                            onClick={() => setFiltros((prev) => ({ ...prev, tipo_demanda: isSel ? '' : t.valor }))}
+                            className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition cursor-pointer group/opt ${
+                              isSel ? 'bg-primary/10 text-primary font-bold border border-primary/20' : 'hover:bg-muted/60 text-foreground'
+                            }`}
+                            title={t.nomeCompleto}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
+                              <span className="font-semibold text-xs tracking-wide">{t.curto}</span>
+                              <span className="text-[10px] text-muted-foreground truncate hidden group-hover/opt:inline">
+                                ({t.nomeCompleto})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] opacity-70">({count})</span>
+                              {isSel && <Check size={11} className="text-primary" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* 7. ETAPA */}
                 <Popover>
                   <div className="hidden md:flex md:col-span-2 lg:col-span-1 items-center justify-between gap-1 group">
                     <PopoverTrigger asChild>

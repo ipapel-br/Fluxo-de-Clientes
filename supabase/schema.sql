@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS public.usuarios (
     email TEXT UNIQUE NOT NULL,
     avatar_url TEXT,
     role TEXT NOT NULL DEFAULT 'seller', -- 'admin', 'seller', 'designer', 'printer'
+    revenda TEXT,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
     status TEXT NOT NULL DEFAULT 'ativo', -- 'ativo', 'inativo'
     permissoes_extras JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS public.usuarios (
 ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS auth_user_id UUID;
 ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'seller';
 ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS roles JSONB DEFAULT '["seller"]'::jsonb;
+ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS revenda TEXT;
 ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ativo';
 ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS permissoes_extras JSONB DEFAULT '{}'::jsonb;

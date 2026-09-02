@@ -34,6 +34,7 @@ import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
 import { formatarDataHistorico } from '@/lib/historico';
 import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
+import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
 import { getStatusColor, getStatusBadgeStyle } from '@/lib/statusColors';
 import { ACABAMENTOS, acabamentoConfig } from '@/lib/acabamentos';
 import { useAuth } from '@/contexts/AuthContext';
@@ -601,6 +602,62 @@ export default function DemandaDrawer({
                                 <span style={{ color: isSelected ? cor : undefined }}>{st.nome}</span>
                               </div>
                               {isSelected && <Check size={13} className="ml-2 shrink-0" style={{ color: cor }} />}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  {/* Demanda (Tipo / Briefing do Projeto) */}
+                  <div className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-muted/40 transition-colors">
+                    <span className="text-muted-foreground font-normal">Demanda</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild disabled={!canEdit}>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 font-semibold text-foreground transition cursor-pointer disabled:cursor-default"
+                          title={tipoDemandaConfig(demanda.tipo_demanda || demanda.demanda)?.descricao || ''}
+                        >
+                          {(() => {
+                            const tipo = tipoDemandaConfig(demanda.tipo_demanda || demanda.demanda);
+                            if (tipo) {
+                              return (
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-xs font-bold ${tipo.bgClass}`}>
+                                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: tipo.cor }} />
+                                  <span>{tipo.curto}</span>
+                                </span>
+                              );
+                            }
+                            return <span className="text-muted-foreground font-normal italic">Não definida</span>;
+                          })()}
+                          {canEdit && <ChevronDown size={12} className="text-muted-foreground opacity-0 group-hover:opacity-60 hover:opacity-100 transition" />}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-[220px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
+                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                          Tipo de Demanda
+                        </div>
+                        {TIPOS_DEMANDA.map((t) => {
+                          const isSelected = tipoDemandaConfig(demanda.tipo_demanda || demanda.demanda)?.valor === t.valor;
+                          return (
+                            <DropdownMenuItem
+                              key={t.valor}
+                              onClick={() => onQuickUpdate?.(demanda, { tipo_demanda: t.valor })}
+                              className={`text-xs py-2 px-2.5 cursor-pointer hover:bg-accent flex flex-col items-start rounded-lg transition-colors my-0.5 ${
+                                isSelected ? 'bg-accent/80 font-bold' : ''
+                              }`}
+                            >
+                              <div className="w-full flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
+                                  <span className="font-semibold text-foreground">{t.curto}</span>
+                                </div>
+                                {isSelected && <Check size={13} className="text-primary shrink-0" />}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground pl-4 font-normal mt-0.5">
+                                {t.nomeCompleto}
+                              </span>
                             </DropdownMenuItem>
                           );
                         })}

@@ -27,6 +27,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
 import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
+import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
 import { getStatusColor, getStatusBadgeStyle } from '@/lib/statusColors';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -367,6 +368,69 @@ export default function DemandaItem({
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
+            </div>
+
+            {/* Coluna 5.5: DEMANDA (Tipo de Demanda: A. COR, REDIMENSIONAR, P. DO ZERO, SHUTTER/BANCO) */}
+            <div className="hidden lg:flex lg:col-span-1 items-center min-w-0 pr-1" onClick={(e) => e.stopPropagation()}>
+              {(() => {
+                const tipoCfg = tipoDemandaConfig(demanda.tipo_demanda || demanda.demanda);
+                return (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild disabled={!canEdit}>
+                      <button
+                        type="button"
+                        className="group/tipo flex items-center gap-1 text-left transition cursor-pointer disabled:cursor-default max-w-full truncate hover:opacity-85"
+                        title={tipoCfg ? `${tipoCfg.nomeCompleto} - ${tipoCfg.descricao}` : (canEdit ? 'Definir tipo de demanda' : 'Sem tipo definido')}
+                      >
+                        {tipoCfg ? (
+                          <span
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded-md border text-[10px] font-bold tracking-tight truncate shadow-2xs ${tipoCfg.bgClass}`}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full mr-1 shrink-0"
+                              style={{ backgroundColor: tipoCfg.cor }}
+                            />
+                            <span className="truncate">{tipoCfg.curto}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-muted-foreground/50 hover:text-muted-foreground italic truncate">
+                            {canEdit ? '+ Tipo' : '—'}
+                          </span>
+                        )}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="min-w-[210px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
+                      <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Tipo de Demanda
+                      </div>
+                      {TIPOS_DEMANDA.map((t) => {
+                        const isSelected = tipoCfg?.valor === t.valor;
+                        return (
+                          <DropdownMenuItem
+                            key={t.valor}
+                            onClick={() => onQuickUpdate?.(demanda, { tipo_demanda: t.valor })}
+                            className={`text-xs py-2 px-2.5 cursor-pointer hover:bg-accent flex flex-col items-start rounded-lg transition-colors my-0.5 ${
+                              isSelected ? 'bg-accent/80 font-bold' : ''
+                            }`}
+                            title={t.descricao}
+                          >
+                            <div className="w-full flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
+                                <span className="font-semibold text-xs text-foreground">{t.curto}</span>
+                              </div>
+                              {isSelected && <Check size={13} className="text-primary shrink-0" />}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground pl-4 font-normal mt-0.5">
+                              {t.nomeCompleto}
+                            </span>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              })()}
             </div>
 
             {/* Coluna 6: ETAPA (Edição Direta via Menu de Fases da Arte) */}
