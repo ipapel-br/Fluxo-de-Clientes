@@ -21,6 +21,7 @@ export default function ImportCsvDialog({
   revendas = [],
   vendedores = [],
   designers = [],
+  usuarios = [],
   demandasExistentes = [],
 }) {
   const fileInputRef = useRef(null);
@@ -30,6 +31,7 @@ export default function ImportCsvDialog({
   const [itens, setItens] = useState([]);
   const [erro, setErro] = useState('');
   const [vendedorEmMassa, setVendedorEmMassa] = useState('');
+  const [designerEmMassa, setDesignerEmMassa] = useState('');
 
   const statusMap = Object.fromEntries(statuses.map((s) => [s.id, s]));
 
@@ -40,17 +42,37 @@ export default function ImportCsvDialog({
       const n = typeof v === 'object' ? (v.nome || v.value) : v;
       if (n) nomes.add(n.trim());
     });
+    usuarios.forEach((u) => {
+      if (u.nome) nomes.add(u.nome.trim());
+    });
     itens.forEach((it) => {
       if (it.vendedor) nomes.add(it.vendedor.trim());
     });
     return Array.from(nomes).sort();
-  }, [vendedores, itens]);
+  }, [vendedores, usuarios, itens]);
+
+  // Lista de designers cadastrados
+  const listaOpcoesDesigners = useMemo(() => {
+    const nomes = new Set();
+    designers.forEach((d) => {
+      const n = typeof d === 'object' ? (d.nome || d.value) : d;
+      if (n) nomes.add(n.trim());
+    });
+    usuarios.forEach((u) => {
+      if (u.nome) nomes.add(u.nome.trim());
+    });
+    itens.forEach((it) => {
+      if (it.designer) nomes.add(it.designer.trim());
+    });
+    return Array.from(nomes).sort();
+  }, [designers, usuarios, itens]);
 
   function handleReset() {
     setArquivo(null);
     setItens([]);
     setErro('');
     setVendedorEmMassa('');
+    setDesignerEmMassa('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
@@ -72,7 +94,7 @@ export default function ImportCsvDialog({
         return;
       }
 
-      const mapeados = mapearRegistrosBitrix(rawRecords, { statuses, revendas });
+      const mapeados = mapearRegistrosBitrix(rawRecords, { statuses, revendas, usuarios });
 
       if (mapeados.length === 0) {
         setErro('Nenhum cliente ou negócio válido pôde ser extraído do CSV.');
@@ -80,15 +102,26 @@ export default function ImportCsvDialog({
         return;
       }
 
-      // Marcar se já existe no sistema (por nome do cliente ou ID do Bitrix)
-      const existentesMap = new Set(
+      // Identifica itens existentes por nome ou por ID do bitrix
+      const existentesNomes = new Set(
         demandasExistentes.map((d) => (d.cliente || '').trim().toLowerCase())
       );
+      const existentesBitrixIds = new Set(
+        demandasExistentes.map((d) => String(d.bitrix_id || '').trim()).filter(Boolean)
+      );
 
-      const itensComStatus = mapeados.map((item) => ({
-        ...item,
-        jaExiste: existentesMap.has((item.cliente || '').trim().toLowerCase()),
-      }));
+      const itensComStatus = mapeados.map((item) => {
+        const clienteNorm = (item.cliente || '').trim().toLowerCase();
+        const bitrixNorm = String(item.bitrix_id || '').trim();
+        const jaExiste = existentesNomes.has(clienteNorm) || (bitrixNorm && existentesBitrixIds.has(bitrixNorm));
+
+        return {
+          ...item,
+          jaExiste,
+          // Se já está no fluxo, fica DESMARCADO automaticamente!
+          selecionado: !jaExiste,
+        };
+      });
 
       setItens(itensComStatus);
     } catch (err) {
@@ -112,14 +145,44 @@ export default function ImportCsvDialog({
 
   function atualizarCampoItem(importId, campo, valor) {
     setItens((prev) =>
-      prev.map((it) => (it.importId === importId ? { ...it, [campo]: valor } : it))
+      prev.map((it) => {
+        if (it.importId !== importId) return it;
+        const patch = { [campo]: valor };
+        // Se atualizou vendedor ou designer, tenta mapear o ID respectivo
+        if (campo === 'vendedor') {
+          const uMatch = usuarios.find((u) => (u.nome || '').toLowerCase().trim() === (valor || '').toLowerCase().trim());
+          patch.seller_id = uMatch ? uMatch.id : null;
+        }
+        if (campo === 'designer') {
+          const uMatch = usuarios.find((u) => (u.nome || '').toLowerCase().trim() === (valor || '').toLowerCase().trim());
+          patch.designer_id = uMatch ? uMatch.id : null;
+        }
+        return { ...it, ...patch };
+      })
     );
   }
 
   function aplicarVendedorEmMassa() {
     if (!vendedorEmMassa.trim()) return;
+    const uMatch = usuarios.find((u) => (u.nome || '').toLowerCase().trim() === vendedorEmMassa.toLowerCase().trim());
     setItens((prev) =>
-      prev.map((it) => (it.selecionado ? { ...it, vendedor: vendedorEmMassa.trim() } : it))
+      prev.map((it) =>
+        it.selecionado
+          ? { ...it, vendedor: vendedorEmMassa.trim(), seller_id: uMatch ? uMatch.id : it.seller_id }
+          : it
+      )
+    );
+  }
+
+  function aplicarDesignerEmMassa() {
+    if (!designerEmMassa.trim()) return;
+    const uMatch = usuarios.find((u) => (u.nome || '').toLowerCase().trim() === designerEmMassa.toLowerCase().trim());
+    setItens((prev) =>
+      prev.map((it) =>
+        it.selecionado
+          ? { ...it, designer: designerEmMassa.trim(), designer_id: uMatch ? uMatch.id : it.designer_id }
+          : it
+      )
     );
   }
 
@@ -218,22 +281,44 @@ export default function ImportCsvDialog({
                   </label>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-muted-foreground">Definir vendedor nos selecionados:</span>
+                <div className="flex items-center gap-4 flex-wrap">
+                  {/* Definir Vendedor em Massa */}
                   <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Vendedor:</span>
                     <input
                       list="sugestoes-vendedores"
                       value={vendedorEmMassa}
                       onChange={(e) => setVendedorEmMassa(e.target.value)}
                       placeholder="Ex: Lucas Nunes..."
-                      className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background w-36 sm:w-48 focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background w-32 sm:w-40 focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={aplicarVendedorEmMassa}
                       disabled={!vendedorEmMassa.trim() || selecionadosCount === 0}
-                      className="h-8 text-xs font-medium"
+                      className="h-8 text-xs font-medium cursor-pointer"
+                    >
+                      <UserCheck size={13} className="mr-1" /> Aplicar
+                    </Button>
+                  </div>
+
+                  {/* Definir Designer em Massa */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Designer:</span>
+                    <input
+                      list="sugestoes-designers"
+                      value={designerEmMassa}
+                      onChange={(e) => setDesignerEmMassa(e.target.value)}
+                      placeholder="Ex: Alan Santos..."
+                      className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background w-32 sm:w-40 focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={aplicarDesignerEmMassa}
+                      disabled={!designerEmMassa.trim() || selecionadosCount === 0}
+                      className="h-8 text-xs font-medium cursor-pointer"
                     >
                       <UserCheck size={13} className="mr-1" /> Aplicar
                     </Button>
@@ -241,9 +326,14 @@ export default function ImportCsvDialog({
                 </div>
               </div>
 
-              {/* Datalist para autocomplete de vendedores */}
+              {/* Datalist para autocomplete de vendedores e designers */}
               <datalist id="sugestoes-vendedores">
                 {listaOpcoesVendedores.map((nome) => (
+                  <option key={nome} value={nome} />
+                ))}
+              </datalist>
+              <datalist id="sugestoes-designers">
+                {listaOpcoesDesigners.map((nome) => (
                   <option key={nome} value={nome} />
                 ))}
               </datalist>
@@ -253,23 +343,26 @@ export default function ImportCsvDialog({
                   <thead className="bg-muted/50 text-muted-foreground border-b border-border sticky top-0 uppercase tracking-wider text-[11px] font-semibold">
                     <tr>
                       <th className="py-2.5 px-3 w-8"></th>
-                      <th className="py-2.5 px-3 min-w-[240px]">Cliente</th>
-                      <th className="py-2.5 px-3 min-w-[200px]">Etapa / O que precisa</th>
+                      <th className="py-2.5 px-3 min-w-[220px]">Cliente</th>
+                      <th className="py-2.5 px-3 min-w-[180px]">Etapa / O que precisa</th>
                       <th className="py-2.5 px-3 min-w-[170px]">Vendedor</th>
-                      <th className="py-2.5 px-3 min-w-[130px]">Designer</th>
-                      <th className="py-2.5 px-3 min-w-[110px]">Prazo</th>
-                      <th className="py-2.5 px-3 min-w-[140px]">Status inicial</th>
+                      <th className="py-2.5 px-3 min-w-[160px]">Designer</th>
+                      <th className="py-2.5 px-3 min-w-[100px]">Prazo</th>
+                      <th className="py-2.5 px-3 min-w-[130px]">Status inicial</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {itens.map((it) => {
                       const st = statusMap[it.status_id];
+                      const vendedorEncontrado = Boolean(it.seller_id || usuarios.some((u) => (u.nome || '').toLowerCase().trim() === (it.vendedor || '').toLowerCase().trim()));
+                      const designerEncontrado = Boolean(it.designer_id || usuarios.some((u) => (u.nome || '').toLowerCase().trim() === (it.designer || '').toLowerCase().trim()));
+
                       return (
                         <tr
                           key={it.importId}
                           onClick={() => toggleItem(it.importId)}
                           className={`hover:bg-muted/40 transition cursor-pointer ${
-                            it.selecionado ? 'bg-primary/5' : 'opacity-60'
+                            it.selecionado ? 'bg-primary/5' : 'opacity-50'
                           }`}
                         >
                           <td className="py-2.5 px-3">
@@ -289,7 +382,7 @@ export default function ImportCsvDialog({
                                   variant="outline"
                                   className="text-[10px] py-0.5 px-1.5 font-medium whitespace-nowrap shrink-0 text-amber-600 border-amber-400/50 bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/40"
                                 >
-                                  Já no fluxo
+                                  Já no fluxo (desmarcado)
                                 </Badge>
                               )}
                             </div>
@@ -303,20 +396,44 @@ export default function ImportCsvDialog({
                             {it.demanda || <span className="italic text-muted-foreground/50">Sem descrição</span>}
                           </td>
                           <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              list="sugestoes-vendedores"
-                              value={it.vendedor || ''}
-                              onChange={(e) => atualizarCampoItem(it.importId, 'vendedor', e.target.value)}
-                              placeholder="Nome do vendedor..."
-                              className="h-7 w-full px-2 text-xs rounded-md border border-input/60 bg-background/80 hover:bg-background focus:bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                            />
+                            <div className="space-y-1">
+                              <input
+                                list="sugestoes-vendedores"
+                                value={it.vendedor || ''}
+                                onChange={(e) => atualizarCampoItem(it.importId, 'vendedor', e.target.value)}
+                                placeholder="Selecione vendedor..."
+                                className={`h-7 w-full px-2 text-xs rounded-md border bg-background/80 hover:bg-background focus:bg-background focus:outline-none focus:ring-1 font-medium ${
+                                  it.vendedor && !vendedorEncontrado
+                                    ? 'border-amber-500/60 focus:ring-amber-500 text-amber-600 dark:text-amber-400'
+                                    : 'border-input/60 focus:ring-primary text-foreground'
+                                }`}
+                              />
+                              {it.vendedor && !vendedorEncontrado && (
+                                <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                                  <span>⚠️ Não cadastrado</span>
+                                </div>
+                              )}
+                            </div>
                           </td>
-                          <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                            {it.designer ? (
-                              <strong className="text-foreground">{it.designer}</strong>
-                            ) : (
-                              '—'
-                            )}
+                          <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="space-y-1">
+                              <input
+                                list="sugestoes-designers"
+                                value={it.designer || ''}
+                                onChange={(e) => atualizarCampoItem(it.importId, 'designer', e.target.value)}
+                                placeholder="Selecione designer..."
+                                className={`h-7 w-full px-2 text-xs rounded-md border bg-background/80 hover:bg-background focus:bg-background focus:outline-none focus:ring-1 font-medium ${
+                                  it.designer && !designerEncontrado
+                                    ? 'border-amber-500/60 focus:ring-amber-500 text-amber-600 dark:text-amber-400'
+                                    : 'border-input/60 focus:ring-primary text-foreground'
+                                }`}
+                              />
+                              {it.designer && !designerEncontrado && (
+                                <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                                  <span>⚠️ Não cadastrado</span>
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
                             {it.prazo ? (

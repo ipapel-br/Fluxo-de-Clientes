@@ -74,6 +74,7 @@ import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 export default function Prioridades() {
   const {
     usuario,
+    usuarios,
     can,
     configuracao,
     designers: designersCadastrados,
@@ -1084,8 +1085,11 @@ export default function Prioridades() {
         demanda: item.demanda || '',
         prazo: item.prazo || '',
         designer: item.designer || '',
+        designer_id: item.designer_id || null,
         vendedor: item.vendedor || '',
+        seller_id: item.seller_id || null,
         revenda: item.revenda || '',
+        company_id: item.company_id || usuario?.company_id || null,
         acabamento: item.acabamento || 'Autocolante',
         etiqueta: item.etiqueta || '',
         status_id: item.status_id || (statuses[0]?.id || ''),
@@ -1103,6 +1107,10 @@ export default function Prioridades() {
     }
 
     setDemandas((prev) => [...prev, ...novasDemandas]);
+    toast({
+      title: 'Importação concluída!',
+      description: `${novasDemandas.length} demanda(s) importada(s) com sucesso.`,
+    });
   }
 
   async function criarStatus(data) {
@@ -2508,6 +2516,7 @@ export default function Prioridades() {
         revendas={revendas}
         vendedores={vendedores}
         designers={designers}
+        usuarios={usuarios}
         demandasExistentes={demandas}
       />
 

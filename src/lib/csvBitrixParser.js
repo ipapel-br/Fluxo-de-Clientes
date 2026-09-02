@@ -170,10 +170,76 @@ export function normalizarEtiqueta(texto) {
 }
 
 /**
+ * Encontra o usuário mais próximo a partir de uma string (que pode ser nome ou e-mail)
+ * Testa correspondência exata, e-mail, primeiro nome e similaridade fonética/letras.
+ */
+export function encontrarUsuarioProximo(texto, listaUsuarios = []) {
+  if (!texto || !Array.isArray(listaUsuarios) || listaUsuarios.length === 0) return null;
+  const busca = texto.trim().toLowerCase();
+  if (!busca) return null;
+
+  // 1. Busca exata por e-mail
+  const porEmail = listaUsuarios.find(
+    (u) => (u.email || '').toLowerCase().trim() === busca
+  );
+  if (porEmail) return porEmail;
+
+  // 2. Se a busca contém um e-mail dentro do texto
+  const emailExtraido = busca.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (emailExtraido) {
+    const porEmailMatch = listaUsuarios.find(
+      (u) => (u.email || '').toLowerCase().trim() === emailExtraido[0]
+    );
+    if (porEmailMatch) return porEmailMatch;
+  }
+
+  // 3. Busca exata por nome completo
+  const porNomeExato = listaUsuarios.find(
+    (u) => (u.nome || '').toLowerCase().trim() === busca
+  );
+  if (porNomeExato) return porNomeExato;
+
+  // 4. Busca por prefixo/inclusão (ex: "Alan" matches "Alan Oliveira" ou "Alan Santos")
+  const buscaPartes = busca.split(/\s+/).filter(Boolean);
+  const primeiroNomeBusca = buscaPartes[0];
+
+  const candidatos = listaUsuarios.filter((u) => {
+    const uNome = (u.nome || '').toLowerCase().trim();
+    const uPartes = uNome.split(/\s+/).filter(Boolean);
+    const uPrimeiroNome = uPartes[0];
+
+    // Mesma pessoa se contém nome completo ou primeiro nome idêntico + sobrenome parcial
+    if (uNome.includes(busca) || busca.includes(uNome)) return true;
+    if (primeiroNomeBusca && uPrimeiroNome === primeiroNomeBusca) {
+      if (buscaPartes.length > 1 && uPartes.length > 1) {
+        // Checa se o último sobrenome confere
+        const ultimoBusca = buscaPartes[buscaPartes.length - 1];
+        const ultimoU = uPartes[uPartes.length - 1];
+        if (ultimoBusca === ultimoU) return true;
+      }
+      return true;
+    }
+    return false;
+  });
+
+  if (candidatos.length === 1) return candidatos[0];
+  if (candidatos.length > 1) {
+    // Escolhe aquele com maior sobreposição de palavras
+    return candidatos.sort((a, b) => {
+      const pontuacaoA = (a.nome || '').toLowerCase().split(/\s+/).filter((w) => busca.includes(w)).length;
+      const pontuacaoB = (b.nome || '').toLowerCase().split(/\s+/).filter((w) => busca.includes(w)).length;
+      return pontuacaoB - pontuacaoA;
+    })[0];
+  }
+
+  return null;
+}
+
+/**
  * Mapeia e transforma os registros brutos do CSV do Bitrix
  * em objetos prontos para serem salvos como Demandas.
  */
-export function mapearRegistrosBitrix(records, { statuses = [], revendas = [] }) {
+export function mapearRegistrosBitrix(records, { statuses = [], revendas = [], usuarios = [] }) {
   if (!Array.isArray(records)) return [];
 
   const revendasNomes = (revendas || [])
@@ -204,13 +270,15 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [] })
         '';
 
       // Designer (Responsável no Bitrix)
-      const designer = (row['Responsável'] || row['Artista'] || '').trim();
+      const designerTexto = (row['Responsável'] || row['Artista'] || '').trim();
+      const matchDesignerUser = encontrarUsuarioProximo(designerTexto, usuarios);
+      const designer = matchDesignerUser ? matchDesignerUser.nome : designerTexto;
+      const designer_id = matchDesignerUser ? matchDesignerUser.id : null;
 
       // Vendedor / Vendedora:
       // Identifica quem realmente criou a lead no Bitrix.
       // Se houver múltiplos criadores/consultores, busca o vendedor (ex: Lucas Nunes, Joice Castro)
-      // e evita colocar a consultora/gestora Grace Helen como vendedora da demanda.
-      let vendedor = '';
+      let vendedorTexto = '';
       const criadores = Array.isArray(row._criadoPorList) ? row._criadoPorList : [];
       const outrosCriadores = [
         ...criadores,
@@ -225,7 +293,7 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [] })
       );
 
       if (vendedorNaoGrace) {
-        vendedor = vendedorNaoGrace.split(',')[0].trim();
+        vendedorTexto = vendedorNaoGrace.split(',')[0].trim();
       } else {
         // 2. Se não encontrou, checa em Consultor Responsável algum nome que não seja Grace
         const consultores = (row['Consultor Responsável'] || '').split(',').map((c) => c.trim());
@@ -233,13 +301,18 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [] })
           (c) => c && !c.toLowerCase().includes('grace')
         );
         if (consultorVendedor) {
-          vendedor = consultorVendedor;
+          vendedorTexto = consultorVendedor;
         } else if (outrosCriadores[0]) {
-          vendedor = outrosCriadores[0].split(',')[0].trim();
+          vendedorTexto = outrosCriadores[0].split(',')[0].trim();
         } else if (consultores[0]) {
-          vendedor = consultores[0];
+          vendedorTexto = consultores[0];
         }
       }
+
+      // Tenta encontrar vendedor na lista de usuários cadastrados
+      const matchVendedorUser = encontrarUsuarioProximo(vendedorTexto, usuarios);
+      const vendedor = matchVendedorUser ? matchVendedorUser.nome : vendedorTexto;
+      const seller_id = matchVendedorUser ? matchVendedorUser.id : null;
 
       // Revenda (Loja, UEN, Empresa responsável, ou busca se contém 'Ipapel', etc.)
       let revenda = row['Loja'] || row['UEN'] || '';
@@ -299,7 +372,9 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [] })
         demanda: demandaEtapa,
         prazo,
         designer,
+        designer_id,
         vendedor,
+        seller_id,
         revenda,
         acabamento,
         etiqueta,
