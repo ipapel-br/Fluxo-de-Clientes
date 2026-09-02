@@ -46,6 +46,8 @@ ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS completed_by TEXT;
 ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS seller_id TEXT;
 ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS designer_id TEXT;
 ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS bitrix_id TEXT;
+ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS tipo_demanda TEXT;
+ALTER TABLE public.demandas ADD COLUMN IF NOT EXISTS complexidade TEXT DEFAULT 'normal';
 
 -- Sincronizar design_position inicial com ordem existente caso esteja zerado
 UPDATE public.demandas SET design_position = ordem WHERE design_position = 0 AND ordem > 0;

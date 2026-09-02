@@ -87,6 +87,8 @@ export function normalizeDemanda(item) {
     acabamento: item.acabamento || 'Autocolante',
     factory_status: factoryStatus,
     urgencia: item.urgencia || 'rotina',
+    tipo_demanda: item.tipo_demanda || '',
+    complexidade: item.complexidade || 'normal',
     design_position: item.design_position !== undefined ? item.design_position : (item.ordem || 0),
     factory_position: item.factory_position !== undefined ? item.factory_position : (item.ordem || 0),
     historico: Array.isArray(item.historico) ? item.historico : [],
