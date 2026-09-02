@@ -14,7 +14,7 @@ import {
 import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
 
 export default function Fabrica() {
-  const { usuario, can, vendedores: vendedoresCadastrados } = useAuth();
+  const { usuario, can, vendedores: vendedoresCadastrados, activeRevenda } = useAuth();
   const [demandas, setDemandas] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +66,14 @@ export default function Fabrica() {
 
   // Demandas ativas para a fábrica (apenas demandas enviadas para impressão e não concluídas)
   const ativasFabrica = useMemo(() => {
+    const isVendedor = Boolean(
+      (usuario?.role === 'seller' || usuario?.roles?.includes('seller')) &&
+      !usuario?.is_admin &&
+      usuario?.role !== 'admin' &&
+      usuario?.role !== 'consultant' &&
+      !usuario?.roles?.includes('consultant')
+    );
+
     return demandas
       .filter((d) => {
         const st = statusMap[d.status_id];
@@ -75,14 +83,35 @@ export default function Fabrica() {
           d.factory_status === 'em_impressao' ||
           d.factory_status === 'na_fila' ||
           d.factory_status === 'pausado';
-        return !estaConcluido && estaNaFabrica;
+        if (estaConcluido || !estaNaFabrica) return false;
+
+        // Isolamento de Tenancy
+        if (usuario?.company_id && d.company_id && String(d.company_id) !== String(usuario.company_id)) {
+          return false;
+        }
+
+        // Vendedor restrito à sua revenda
+        if (isVendedor && usuario?.revenda) {
+          if ((d.revenda || '').toLowerCase().trim() !== usuario.revenda.toLowerCase().trim()) {
+            return false;
+          }
+        }
+
+        // Filtro pela Revenda ativa no topo
+        if (!isVendedor && activeRevenda && activeRevenda !== '__all__') {
+          if ((d.revenda || '').toLowerCase().trim() !== activeRevenda.toLowerCase().trim()) {
+            return false;
+          }
+        }
+
+        return true;
       })
       .map((d, index) => ({
         ...d,
         factory_position: d.factory_position !== undefined ? d.factory_position : index,
       }))
       .sort((a, b) => (a.factory_position ?? 0) - (b.factory_position ?? 0));
-  }, [demandas, statusMap]);
+  }, [demandas, statusMap, usuario, activeRevenda]);
 
   const filtrando = Boolean(
     filtros.busca ||

@@ -24,8 +24,9 @@ const defaultStatuses = () => {
     { id: 'status_criacao', nome: 'Criação', cor: '#f59e0b', concluido: false, ordem: 1, created_date: timestamp, updated_date: timestamp },
     { id: 'status_revisao', nome: 'Revisão', cor: '#f97316', concluido: false, ordem: 2, created_date: timestamp, updated_date: timestamp },
     { id: 'status_amostra', nome: 'Amostra', cor: '#06b6d4', concluido: false, ordem: 3, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_impressao', nome: 'Impressão', cor: '#8b5cf6', concluido: false, ordem: 4, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_concluido', nome: 'Concluído', cor: '#22c55e', concluido: true, ordem: 5, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_aprovado', nome: 'Aprovado', cor: '#0284c7', concluido: false, ordem: 4, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_impressao', nome: 'Impressão', cor: '#8b5cf6', concluido: false, ordem: 5, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_concluido', nome: 'Concluído', cor: '#22c55e', concluido: true, ordem: 6, created_date: timestamp, updated_date: timestamp },
   ];
 };
 
@@ -51,6 +52,7 @@ const defaultUsuarios = () => {
       email: 'grace@fluxodeclientes.com',
       role: 'consultant',
       roles: ['consultant', 'seller'],
+      revenda: 'Papelée',
       status: 'ativo',
       permissoes_extras: {},
       created_date: timestamp,
@@ -85,6 +87,7 @@ const defaultDemandas = () => {
       cliente: 'Luise Torres',
       demanda: 'Recriando arte dos quadros',
       etiqueta: 'alta',
+      complexidade: 'normal',
       prazo: '2026-08-31', // Hoje
       fase_arte: 'iniciando',
       designer: '',
@@ -103,6 +106,7 @@ const defaultDemandas = () => {
       cliente: 'COLEÇÃO - Nathaly',
       demanda: 'Tenho mais três durante a semana',
       etiqueta: 'urgente',
+      complexidade: 'dificil',
       prazo: '2026-08-28', // Vencido
       fase_arte: 'no_meio',
       designer: 'Alan Oliveira',
@@ -122,6 +126,7 @@ const defaultDemandas = () => {
       demanda: 'Bitrix #18929',
       bitrix_id: '18929',
       etiqueta: 'alta',
+      complexidade: 'facil',
       prazo: '2026-08-31', // Hoje
       fase_arte: '',
       designer: 'Alan Santos',
@@ -141,6 +146,7 @@ const defaultDemandas = () => {
       demanda: 'Bitrix #18913',
       bitrix_id: '18913',
       etiqueta: 'alta',
+      complexidade: 'complexo',
       prazo: '2026-06-05', // Vencido
       fase_arte: '',
       designer: 'Alan Santos',
@@ -159,6 +165,7 @@ const defaultDemandas = () => {
       cliente: 'Excelência Lingerie',
       demanda: '',
       etiqueta: 'alta',
+      complexidade: 'normal',
       prazo: '2026-08-28', // Vencido
       fase_arte: '',
       designer: 'Alan Santos',
@@ -256,7 +263,7 @@ function normalizeState(value) {
       : [];
 
   // 1. Lista canônica e estrita de status:
-  // Parado, Criação, Revisão, Amostra, Impressão, Concluído
+  // Parado, Criação, Revisão, Amostra, Aprovado, Impressão, Concluído
   const padraoStatuses = defaultStatuses();
   
   // Mapa de normalização de IDs antigos ou nomes similares

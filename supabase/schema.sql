@@ -201,8 +201,9 @@ VALUES
     ('status_criacao', 'Criação', '#f59e0b', FALSE, 1),
     ('status_revisao', 'Revisão', '#f97316', FALSE, 2),
     ('status_amostra', 'Amostra', '#06b6d4', FALSE, 3),
-    ('status_impressao', 'Impressão', '#8b5cf6', FALSE, 4),
-    ('status_concluido', 'Concluído', '#22c55e', TRUE, 5)
+    ('status_aprovado', 'Aprovado', '#0284c7', FALSE, 4),
+    ('status_impressao', 'Impressão', '#8b5cf6', FALSE, 5),
+    ('status_concluido', 'Concluído', '#22c55e', TRUE, 6)
 ON CONFLICT (id) DO UPDATE SET
     nome = EXCLUDED.nome,
     cor = EXCLUDED.cor,

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Search, SlidersHorizontal, ArrowUpDown, X, Check } from 'lucide-react';
+import { Search, SlidersHorizontal, ArrowUpDown, X, Check, List, Columns3 } from 'lucide-react';
+import { COMPLEXIDADES } from '@/lib/complexidade';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -77,6 +78,9 @@ export default function Filtros({
   ordenacao = 'prioridade',
   setOrdenacao,
   contadores = { todas: 0, minhas: 0, hoje: 0, atrasadas: 0, altaPrioridade: 0 },
+  viewMode = 'lista',
+  onViewModeChange,
+  acoesExtras,
 }) {
   const statusOpts = useMemo(
     () =>
@@ -86,33 +90,18 @@ export default function Filtros({
     [statuses]
   );
 
-  const statusMap = useMemo(
-    () => Object.fromEntries(statuses.map((s) => [s.id, s.nome])),
-    [statuses]
-  );
-
   // Calcula total de filtros ativos (além da busca e da aba ativa)
   const filtrosAtivosCount = useMemo(() => {
     let count = 0;
     if (filtros.status) count++;
     if (filtros.prioridade) count++;
+    if (filtros.complexidade) count++;
     if (filtros.etapa) count++;
     if (filtros.designer) count++;
     if (filtros.vendedor) count++;
     if (filtros.revenda) count++;
     return count;
   }, [filtros]);
-
-  const temQualquerFiltro = Boolean(
-    filtros.busca ||
-    filtros.aba !== 'todas' ||
-    filtros.vendedor ||
-    filtros.revenda ||
-    filtros.designer ||
-    filtros.status ||
-    filtros.prioridade ||
-    filtros.etapa
-  );
 
   function limparFiltros() {
     setFiltros({
@@ -123,6 +112,7 @@ export default function Filtros({
       designer: '',
       status: '',
       prioridade: '',
+      complexidade: '',
       etapa: '',
     });
   }
@@ -293,6 +283,38 @@ export default function Filtros({
           )}
         </div>
 
+        {/* Seletor Lista / Kanban */}
+        {onViewModeChange && (
+          <div className="flex items-center rounded-lg border border-border bg-card p-1 h-10 shrink-0 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => onViewModeChange('lista')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer h-full ${
+                viewMode === 'lista'
+                  ? 'bg-secondary text-foreground font-semibold shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+              }`}
+              title="Visualização em Lista"
+            >
+              <List size={14} />
+              <span>Lista</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewModeChange('kanban')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer h-full ${
+                viewMode === 'kanban'
+                  ? 'bg-secondary text-foreground font-semibold shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+              }`}
+              title="Visualização em Kanban"
+            >
+              <Columns3 size={14} />
+              <span>Kanban</span>
+            </button>
+          </div>
+        )}
+
         {/* Botão Filtros Popover */}
         <Popover>
           <PopoverTrigger asChild>
@@ -355,6 +377,33 @@ export default function Filtros({
                     <SelectItem value="urgente" className="text-xs">Apenas Urgente</SelectItem>
                     <SelectItem value="alta" className="text-xs">Apenas Alta</SelectItem>
                     <SelectItem value="rotina" className="text-xs">Rotina</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Complexidade */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">Complexidade</label>
+                <Select
+                  value={filtros.complexidade || ALL}
+                  onValueChange={(v) => setFiltros({ ...filtros, complexidade: v === ALL ? '' : v })}
+                >
+                  <SelectTrigger className="h-8.5 w-full bg-card border-border text-xs text-foreground">
+                    <SelectValue placeholder="Todas as complexidades" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border text-popover-foreground">
+                    <SelectItem value={ALL} className="text-xs">Todas as complexidades</SelectItem>
+                    {COMPLEXIDADES.map((c) => (
+                      <SelectItem key={c.valor} value={c.valor} className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2 w-2 rounded-full shrink-0"
+                            style={{ backgroundColor: c.cor }}
+                          />
+                          <span>{c.label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -457,123 +506,12 @@ export default function Filtros({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
 
-      {/* 3. Chips de filtros ativos compactos e ação de limpar */}
-      <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
-        {/* Chip Status */}
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/80 border border-border text-muted-foreground">
-          <span>Status:</span>
-          <span className="font-semibold text-foreground">
-            {filtros.status
-              ? (filtros.status === 'abertas' ? 'Abertas' : statusMap[filtros.status] || filtros.status)
-              : 'Abertas'}
-          </span>
-          {filtros.status && filtros.status !== 'abertas' && (
-            <button
-              type="button"
-              onClick={() => setFiltros({ ...filtros, status: '' })}
-              className="ml-0.5 hover:text-foreground cursor-pointer"
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
-
-        {/* Chip Prioridade */}
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/80 border border-border text-muted-foreground">
-          <span>Prioridade:</span>
-          <span className="font-semibold text-foreground">
-            {filtros.prioridade === 'urgente'
-              ? 'Urgente'
-              : filtros.prioridade === 'alta'
-              ? 'Alta'
-              : filtros.prioridade === 'rotina'
-              ? 'Rotina'
-              : 'Alta, Urgente'}
-          </span>
-          {filtros.prioridade && (
-            <button
-              type="button"
-              onClick={() => setFiltros({ ...filtros, prioridade: '' })}
-              className="ml-0.5 hover:text-foreground cursor-pointer"
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
-
-        {/* Chip Etapa */}
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/80 border border-border text-muted-foreground">
-          <span>Etapa:</span>
-          <span className="font-semibold text-foreground">
-            {filtros.etapa || 'Todas'}
-          </span>
-          {filtros.etapa && (
-            <button
-              type="button"
-              onClick={() => setFiltros({ ...filtros, etapa: '' })}
-              className="ml-0.5 hover:text-foreground cursor-pointer"
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
-
-        {/* Chip Designer se selecionado */}
-        {filtros.designer && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/80 border border-border text-muted-foreground">
-            <span>Designer:</span>
-            <span className="font-semibold text-foreground">{filtros.designer}</span>
-            <button
-              type="button"
-              onClick={() => setFiltros({ ...filtros, designer: '' })}
-              className="ml-0.5 hover:text-foreground cursor-pointer"
-            >
-              <X size={12} />
-            </button>
+        {/* Ações adicionais (Importar CSV, Nova demanda, etc.) */}
+        {acoesExtras && (
+          <div className="flex items-center gap-2 shrink-0">
+            {acoesExtras}
           </div>
-        )}
-
-        {/* Chip Vendedor se selecionado */}
-        {filtros.vendedor && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/80 border border-border text-muted-foreground">
-            <span>Vendedor:</span>
-            <span className="font-semibold text-foreground">{filtros.vendedor}</span>
-            <button
-              type="button"
-              onClick={() => setFiltros({ ...filtros, vendedor: '' })}
-              className="ml-0.5 hover:text-foreground cursor-pointer"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* Chip Revenda se selecionado */}
-        {filtros.revenda && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/80 border border-border text-muted-foreground">
-            <span>Revenda:</span>
-            <span className="font-semibold text-foreground">{filtros.revenda}</span>
-            <button
-              type="button"
-              onClick={() => setFiltros({ ...filtros, revenda: '' })}
-              className="ml-0.5 hover:text-foreground cursor-pointer"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* Ação em texto: Limpar filtros */}
-        {temQualquerFiltro && (
-          <button
-            type="button"
-            onClick={limparFiltros}
-            className="text-xs text-muted-foreground hover:text-foreground hover:underline ml-1 font-medium transition cursor-pointer"
-          >
-            Limpar filtros
-          </button>
         )}
       </div>
     </div>

@@ -11,6 +11,8 @@ import {
 import { syncAvatarsFromUsers, saveAvatar } from '@/lib/avatarService';
 
 const AUTH_STORAGE_KEY = 'fluxo-clientes:current-user';
+const ACTIVE_REVENDA_STORAGE_KEY = 'fluxo-clientes:active-revenda';
+const ADMIN_VIEW_MODE_STORAGE_KEY = 'fluxo-clientes:admin-view-mode';
 
 function safeStorageGet(key) {
   try {
@@ -62,6 +64,36 @@ export function AuthProvider({ children }) {
   const [configuracao, setConfiguracao] = useState({ seller_view_mode: 'all' });
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [carregandoAuth, setCarregandoAuth] = useState(true);
+
+  // Visão do Admin: 'global' (todas as demandas) ou 'pessoal' (apenas as próprias)
+  const [adminViewMode, setAdminViewModeState] = useState(() => {
+    return safeStorageGet(ADMIN_VIEW_MODE_STORAGE_KEY) || 'global';
+  });
+
+  const setAdminViewMode = useCallback((mode) => {
+    const val = mode === 'pessoal' ? 'pessoal' : 'global';
+    setAdminViewModeState(val);
+    safeStorageSet(ADMIN_VIEW_MODE_STORAGE_KEY, val);
+  }, []);
+
+  const toggleAdminViewMode = useCallback(() => {
+    setAdminViewModeState((prev) => {
+      const proximo = prev === 'global' ? 'pessoal' : 'global';
+      safeStorageSet(ADMIN_VIEW_MODE_STORAGE_KEY, proximo);
+      return proximo;
+    });
+  }, []);
+
+  // Revenda Selecionada (Filtro ativo no topo)
+  const [activeRevenda, setActiveRevendaState] = useState(() => {
+    return safeStorageGet(ACTIVE_REVENDA_STORAGE_KEY) || '__all__';
+  });
+
+  const setActiveRevenda = useCallback((rev) => {
+    const val = rev || '__all__';
+    setActiveRevendaState(val);
+    safeStorageSet(ACTIVE_REVENDA_STORAGE_KEY, val);
+  }, []);
 
   // Carregar lista de usuários, revendas e configurações
   const carregarUsuariosEConfig = useCallback(async () => {
@@ -359,7 +391,7 @@ export function AuthProvider({ children }) {
   /**
    * Adicionar usuário (Apenas Administrador)
    */
-  async function adicionarUsuario({ nome, email, role, roles, is_admin, permissoes_extras }) {
+  async function adicionarUsuario({ nome, email, role, roles, revenda = '', is_admin, permissoes_extras }) {
     if (!can('users_manage') && usuario?.role !== PERFIS.ADMIN && !usuario?.is_admin) {
       return { success: false, error: 'Você não tem permissão para adicionar usuários.' };
     }
@@ -392,7 +424,7 @@ export function AuthProvider({ children }) {
           const { error: inviteError } = await supabase.auth.signInWithOtp({
             email: emailLimpo,
             options: {
-              data: { nome: nomeLimpo, role: rolePrincipal, roles: rolesArray, is_admin: Boolean(is_admin) },
+              data: { nome: nomeLimpo, role: rolePrincipal, roles: rolesArray, revenda: revenda || '', is_admin: Boolean(is_admin) },
             },
           });
           if (inviteError) {
@@ -408,6 +440,7 @@ export function AuthProvider({ children }) {
         email: emailLimpo,
         role: rolePrincipal,
         roles: rolesArray,
+        revenda: revenda || '',
         is_admin: Boolean(is_admin),
         status: 'ativo',
         permissoes_extras: permissoes_extras || {},
@@ -591,36 +624,66 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // 2. Regras de Isolamento Multi-tenant (Tenancy):
+  // As revendas pertencentes a uma empresa nunca devem ser listadas ou acessíveis por usuários de outra empresa.
+  const revendasMultiTenant = useMemo(() => {
+    if (!usuario?.company_id) {
+      return revendasLista;
+    }
+    return revendasLista.filter(
+      (r) => !r.company_id || String(r.company_id) === String(usuario.company_id)
+    );
+  }, [revendasLista, usuario?.company_id]);
+
   // Listas de usuários ativos categorizados por papéis operacionais
   const vendedoresCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && (userHasRole(u, PERFIS.SELLER) || userHasRole(u, PERFIS.CONSULTANT)))
-      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles }));
-  }, [usuariosLista]);
+      .filter((u) => {
+        if (u.status !== 'ativo') return false;
+        if (usuario?.company_id && u.company_id && String(u.company_id) !== String(usuario.company_id)) {
+          return false;
+        }
+        return userHasRole(u, PERFIS.SELLER) || userHasRole(u, PERFIS.CONSULTANT);
+      })
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles, revenda: u.revenda || '', company_id: u.company_id || '' }));
+  }, [usuariosLista, usuario?.company_id]);
 
   const designersCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && userHasRole(u, PERFIS.DESIGNER))
-      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles }));
-  }, [usuariosLista]);
+      .filter((u) => {
+        if (u.status !== 'ativo') return false;
+        if (usuario?.company_id && u.company_id && String(u.company_id) !== String(usuario.company_id)) {
+          return false;
+        }
+        return userHasRole(u, PERFIS.DESIGNER);
+      })
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles, revenda: u.revenda || '', company_id: u.company_id || '' }));
+  }, [usuariosLista, usuario?.company_id]);
 
   const impressoresCadastrados = useMemo(() => {
     return usuariosLista
-      .filter((u) => u.status === 'ativo' && userHasRole(u, PERFIS.PRINTER))
-      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles }));
-  }, [usuariosLista]);
+      .filter((u) => {
+        if (u.status !== 'ativo') return false;
+        if (usuario?.company_id && u.company_id && String(u.company_id) !== String(usuario.company_id)) {
+          return false;
+        }
+        return userHasRole(u, PERFIS.PRINTER);
+      })
+      .map((u) => ({ id: u.id, nome: u.nome, email: u.email, avatar_url: u.avatar_url, role: u.role, roles: u.roles, company_id: u.company_id || '' }));
+  }, [usuariosLista, usuario?.company_id]);
 
   /**
    * Adicionar Revenda
    */
-  async function adicionarRevenda({ nome, logo_url = '' }) {
-    if (!can('revendas_manage') && !can('settings_manage') && usuario?.role !== PERFIS.ADMIN) {
+  async function adicionarRevenda({ nome, logo_url = '', company_id = null }) {
+    if (!can('revendas_manage') && !can('settings_manage') && usuario?.role !== PERFIS.ADMIN && !usuario?.is_admin) {
       return { success: false, error: 'Sem permissão para cadastrar revendas.' };
     }
     try {
       const criada = await localClient.entities.Revenda.create({
         nome: nome.trim(),
         logo_url,
+        company_id: company_id || usuario?.company_id || null,
       });
       if (logo_url && nome) {
         saveAvatar(nome, logo_url);
@@ -684,7 +747,13 @@ export function AuthProvider({ children }) {
       value={{
         usuario,
         usuarios: usuariosLista,
-        revendas: revendasLista,
+        revendas: revendasMultiTenant,
+        todasRevendas: revendasLista,
+        activeRevenda,
+        setActiveRevenda,
+        adminViewMode,
+        setAdminViewMode,
+        toggleAdminViewMode,
         vendedores: vendedoresCadastrados,
         designers: designersCadastrados,
         impressores: impressoresCadastrados,

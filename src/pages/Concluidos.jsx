@@ -24,7 +24,7 @@ import { formatarDataHistorico } from '@/lib/historico';
 import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
 
 export default function Concluidos() {
-  const { usuario, can } = useAuth();
+  const { usuario, can, activeRevenda } = useAuth();
   const [demandas, setDemandas] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,16 +57,43 @@ export default function Concluidos() {
     [statuses]
   );
 
-  const concluidas = useMemo(
-    () =>
-      demandas
-        .filter((d) => {
-          const st = statusMap[d.status_id];
-          return st && st.concluido;
-        })
-        .sort((a, b) => new Date(b.completed_at || b.updated_date) - new Date(a.completed_at || a.updated_date)),
-    [demandas, statusMap]
-  );
+  const concluidas = useMemo(() => {
+    const isVendedor = Boolean(
+      (usuario?.role === 'seller' || usuario?.roles?.includes('seller')) &&
+      !usuario?.is_admin &&
+      usuario?.role !== 'admin' &&
+      usuario?.role !== 'consultant' &&
+      !usuario?.roles?.includes('consultant')
+    );
+
+    return demandas
+      .filter((d) => {
+        const st = statusMap[d.status_id];
+        if (!st || !st.concluido) return false;
+
+        // Isolamento de Tenancy
+        if (usuario?.company_id && d.company_id && String(d.company_id) !== String(usuario.company_id)) {
+          return false;
+        }
+
+        // Vendedor restrito à sua revenda
+        if (isVendedor && usuario?.revenda) {
+          if ((d.revenda || '').toLowerCase().trim() !== usuario.revenda.toLowerCase().trim()) {
+            return false;
+          }
+        }
+
+        // Filtro pela Revenda ativa no topo
+        if (!isVendedor && activeRevenda && activeRevenda !== '__all__') {
+          if ((d.revenda || '').toLowerCase().trim() !== activeRevenda.toLowerCase().trim()) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => new Date(b.completed_at || b.updated_date) - new Date(a.completed_at || a.updated_date));
+  }, [demandas, statusMap, usuario, activeRevenda]);
 
   const visiveis = useMemo(() => {
     if (!busca) return concluidas;

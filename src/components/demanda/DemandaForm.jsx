@@ -19,6 +19,7 @@ import HistoricoPainel from './HistoricoPainel';
 import RegistrarAlteracaoDialog from './RegistrarAlteracaoDialog';
 import { ETIQUETAS, etiquetaConfig } from '@/lib/etiquetas';
 import { FASES_ARTE, faseArteConfig } from '@/lib/progressoArte';
+import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 import { ACABAMENTOS } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
 
@@ -29,6 +30,7 @@ const VAZIO = {
   vendedor: '',
   designer: '',
   fase_arte: '',
+  complexidade: 'normal',
   prazo: '',
   status_id: '',
   etiqueta: '',
@@ -65,6 +67,7 @@ export default function DemandaForm({
             vendedor: demanda.vendedor || '',
             designer: demanda.designer || '',
             fase_arte: demanda.fase_arte || '',
+            complexidade: demanda.complexidade || 'normal',
             prazo: demanda.prazo || '',
             status_id: demanda.status_id || '',
             etiqueta: demanda.etiqueta || '',
@@ -92,6 +95,7 @@ export default function DemandaForm({
         vendedor: (form.vendedor || '').trim(),
         designer: (form.designer || '').trim(),
         fase_arte: form.fase_arte || '',
+        complexidade: form.complexidade || 'normal',
         prazo: form.prazo || '',
         status_id: form.status_id || '',
         etiqueta: form.etiqueta || '',
@@ -270,6 +274,37 @@ export default function DemandaForm({
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label>Complexidade</Label>
+              <div className="flex flex-wrap gap-2">
+                {COMPLEXIDADES.map((c) => {
+                  const selecionada = (form.complexidade || 'normal').toLowerCase() === c.valor;
+                  return (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      onClick={() => set('complexidade', c.valor)}
+                      style={
+                        selecionada
+                          ? {
+                              backgroundColor: hexToRgba(c.cor, 0.16),
+                              color: c.cor,
+                              borderColor: hexToRgba(c.cor, 0.4),
+                            }
+                          : undefined
+                      }
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                        selecionada ? 'ring-1 ring-primary/20 shadow-2xs' : 'border-input text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full mr-1.5" style={{ backgroundColor: c.cor }} />
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="revenda">Revenda</Label>
@@ -302,7 +337,18 @@ export default function DemandaForm({
                 <Label htmlFor="vendedor">Vendedor</Label>
                 <Select
                   value={form.vendedor || '__none__'}
-                  onValueChange={(v) => set('vendedor', v === '__none__' ? '' : v)}
+                  onValueChange={(v) => {
+                    const nomeVendedor = v === '__none__' ? '' : v;
+                    const vendObj = vendedores.find(
+                      (vend) => (vend.nome || vend.value || vend.label) === nomeVendedor
+                    );
+                    const patch = { vendedor: nomeVendedor };
+                    // Se o vendedor pertencer a uma revenda e o formulário ainda não tiver revenda ou for nova demanda
+                    if (vendObj?.revenda && (!form.revenda || !demanda)) {
+                      patch.revenda = vendObj.revenda;
+                    }
+                    setForm((prev) => ({ ...prev, ...patch }));
+                  }}
                 >
                   <SelectTrigger id="vendedor" className="h-10 text-sm">
                     <SelectValue placeholder="Selecione o vendedor" />
@@ -313,11 +359,19 @@ export default function DemandaForm({
                       const val = typeof v === 'object' ? v.value || v.nome : v;
                       const lbl = typeof v === 'object' ? v.label || v.nome : v;
                       const avatar = typeof v === 'object' ? v.avatar_url : undefined;
+                      const revendaNome = typeof v === 'object' ? v.revenda : undefined;
                       return (
                         <SelectItem key={val} value={val}>
-                          <div className="flex items-center gap-2">
-                            <UserAvatar name={lbl} src={avatar} size="xs" />
-                            <span>{lbl}</span>
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <div className="flex items-center gap-2">
+                              <UserAvatar name={lbl} src={avatar} size="xs" />
+                              <span>{lbl}</span>
+                            </div>
+                            {revendaNome && (
+                              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">
+                                {revendaNome}
+                              </span>
+                            )}
                           </div>
                         </SelectItem>
                       );

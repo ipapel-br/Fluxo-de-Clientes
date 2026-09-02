@@ -21,11 +21,14 @@ import {
   Search,
   Clock,
   Sparkles,
+  SlidersHorizontal,
   User as UserIcon,
+  CheckSquare,
 } from 'lucide-react';
 import { localClient } from '@/api/localClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Popover,
   PopoverContent,
@@ -40,6 +43,7 @@ import ImportCsvDialog from '@/components/demanda/ImportCsvDialog';
 import Filtros from '@/components/demanda/Filtros';
 import StatusForm from '@/components/demanda/StatusForm';
 import StatusManager from '@/components/demanda/StatusManager';
+import PrioridadesKanban from '@/components/demanda/PrioridadesKanban';
 import ExcluirDemandaDialog from '@/components/demanda/ExcluirDemandaDialog';
 import RegistrarAlteracaoDialog from '@/components/demanda/RegistrarAlteracaoDialog';
 import HistoricoPainel from '@/components/demanda/HistoricoPainel';
@@ -53,7 +57,7 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import AcessoNegado from '@/components/auth/AcessoNegado';
 import { useAuth } from '@/contexts/AuthContext';
-import { PERFIS } from '@/lib/permissoes';
+import { PERFIS, userHasRole } from '@/lib/permissoes';
 import {
   gerarEntradasEdicao,
   entradaSituacao,
@@ -64,7 +68,8 @@ import {
   entradaAlteracaoPrazo,
 } from '@/lib/historico';
 import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
-import { tipoAlertaPrazo } from '@/lib/datas';
+import { tipoAlertaPrazo, calcularScorePrazoProximo } from '@/lib/datas';
+import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 
 export default function Prioridades() {
   const {
@@ -74,6 +79,8 @@ export default function Prioridades() {
     designers: designersCadastrados,
     vendedores: vendedoresCadastrados,
     revendas: revendasCadastradas,
+    activeRevenda,
+    adminViewMode,
   } = useAuth();
   const [demandas, setDemandas] = useState([]);
   const [statuses, setStatuses] = useState([]);
@@ -89,6 +96,7 @@ export default function Prioridades() {
     designer: '',
     status: '',
     prioridade: '',
+    complexidade: '',
     etapa: '',
   });
   const [sortConfig, setSortConfig] = useState({ key: 'ordem', direction: 'asc' });
@@ -101,6 +109,14 @@ export default function Prioridades() {
   const [excluindoDemanda, setExcluindoDemanda] = useState(false);
   const [historicoModalDemanda, setHistoricoModalDemanda] = useState(null);
   const [alteracaoModalDemanda, setAlteracaoModalDemanda] = useState(null);
+  const [selecionadosIds, setSelecionadosIds] = useState(() => new Set());
+  const [lastSelectedId, setLastSelectedId] = useState(null);
+  const [modalLoteRevendaOpen, setModalLoteRevendaOpen] = useState(false);
+  const [revendaLoteSelecionada, setRevendaLoteSelecionada] = useState('');
+  const [modalLoteStatusOpen, setModalLoteStatusOpen] = useState(false);
+  const [statusLoteSelecionado, setStatusLoteSelecionado] = useState('');
+  const [modalLoteDesignerOpen, setModalLoteDesignerOpen] = useState(false);
+  const [designerLoteSelecionado, setDesignerLoteSelecionado] = useState('');
   const [viewMode, setViewMode] = useState(() => {
     try {
       return localStorage.getItem('fluxo-clientes:view-mode') || 'lista';
@@ -113,6 +129,16 @@ export default function Prioridades() {
     setViewMode(mode);
     try {
       localStorage.setItem('fluxo-clientes:view-mode', mode);
+    } catch {}
+  };
+
+  const carregarHistoricoDemanda = async (d) => {
+    try {
+      const logs = await localClient.entities.AuditLog.list('created_at', 50);
+      const filtrados = logs.filter(
+        (l) => l.entity_id === d.id || l.details?.includes(d.cliente)
+      );
+      setHistoricoModalDemanda({ ...d, audit_logs: filtrados });
     } catch {}
   };
 
@@ -139,9 +165,25 @@ export default function Prioridades() {
     [statuses]
   );
 
-  // Demandas ativas na fila de prioridade (exclui demandas já enviadas para impressão ou concluídas)
+  // Demandas ativas na fila de prioridade aplicando as regras de Tenancy e RBAC
   const ativas = useMemo(() => {
+    const userName = (usuario?.nome || '').toLowerCase().trim();
+    const isAdmin = Boolean(usuario?.is_admin || usuario?.role === PERFIS.ADMIN);
+    const isDesigner = Boolean(
+      (usuario?.role === PERFIS.DESIGNER || userHasRole(usuario, PERFIS.DESIGNER)) &&
+      !isAdmin &&
+      usuario?.role !== PERFIS.CONSULTANT &&
+      !userHasRole(usuario, PERFIS.CONSULTANT)
+    );
+    const isVendedor = Boolean(
+      (usuario?.role === PERFIS.SELLER || userHasRole(usuario, PERFIS.SELLER)) &&
+      !isAdmin &&
+      usuario?.role !== PERFIS.CONSULTANT &&
+      !userHasRole(usuario, PERFIS.CONSULTANT)
+    );
+
     let list = demandas.filter((d) => {
+      // 1. Não exibir concluídas nem demandas em produção/fábrica na fila de arte
       const st = statusMap[d.status_id];
       const estaConcluido = Boolean(st?.concluido || d.completed_at);
       const estaNaFabrica =
@@ -149,24 +191,67 @@ export default function Prioridades() {
         d.factory_status === 'em_impressao' ||
         d.factory_status === 'na_fila' ||
         d.factory_status === 'pausado';
-      return !estaConcluido && !estaNaFabrica;
+      if (estaConcluido || estaNaFabrica) return false;
+
+      // 2. Isolamento Multi-tenant (Tenancy de Empresa)
+      if (usuario?.company_id && d.company_id) {
+        if (String(d.company_id) !== String(usuario.company_id)) {
+          return false;
+        }
+      }
+
+      // 3. Regras de Permissão por Perfil (RBAC):
+      // - Designer: apenas demandas atribuídas a ele próprio
+      if (isDesigner) {
+        const designerDemanda = (d.designer || '').toLowerCase().trim();
+        if (designerDemanda !== userName && d.designer_id !== usuario?.id) {
+          return false;
+        }
+      }
+
+      // - Vendedor: restrito à sua revenda/loja designada
+      if (isVendedor) {
+        if (usuario?.revenda) {
+          const revendaDemanda = (d.revenda || '').toLowerCase().trim();
+          const revendaUsuario = (usuario.revenda || '').toLowerCase().trim();
+          if (revendaDemanda !== revendaUsuario) {
+            return false;
+          }
+        }
+        // Se configurado no modo próprio, vendedor vê apenas suas demandas
+        if (configuracao?.seller_view_mode === 'own') {
+          const vendedorDemanda = (d.vendedor || '').toLowerCase().trim();
+          if (vendedorDemanda !== userName && d.seller_id !== usuario?.id) {
+            return false;
+          }
+        }
+      }
+
+      // - Admin: Alternador de visão do cabeçalho (olho)
+      if (isAdmin) {
+        if (adminViewMode === 'pessoal') {
+          const dDesigner = (d.designer || '').toLowerCase().trim();
+          const dVendedor = (d.vendedor || '').toLowerCase().trim();
+          const eMinha = dDesigner === userName || dVendedor === userName || d.seller_id === usuario?.id;
+          if (!eMinha) return false;
+        }
+      }
+
+      // 4. Filtro pelo Seletor Global de Revenda (Dropdown do topo)
+      // Válido para Admin e Consultor quando não for '__all__'
+      if (!isVendedor && activeRevenda && activeRevenda !== '__all__') {
+        const revendaDemanda = (d.revenda || '').toLowerCase().trim();
+        const revendaFiltro = activeRevenda.toLowerCase().trim();
+        if (revendaDemanda !== revendaFiltro) {
+          return false;
+        }
+      }
+
+      return true;
     });
 
-    // Se o sistema estiver configurado no Modo 2 (Vendedor vê apenas suas demandas)
-    if (
-      configuracao?.seller_view_mode === 'own' &&
-      usuario?.role === PERFIS.SELLER &&
-      usuario?.nome
-    ) {
-      list = list.filter(
-        (d) =>
-          (d.vendedor || '').toLowerCase().trim() === usuario.nome.toLowerCase().trim() ||
-          d.seller_id === usuario.id
-      );
-    }
-
     return list.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-  }, [demandas, statusMap, configuracao, usuario]);
+  }, [demandas, statusMap, configuracao, usuario, activeRevenda, adminViewMode]);
 
   // Contadores para as abas rápidas
   const contadores = useMemo(() => {
@@ -249,6 +334,7 @@ export default function Prioridades() {
     filtros.prioridade ||
     filtros.etapa ||
     filtros.prazo ||
+    ordenacao !== 'prioridade' ||
     sortConfig.key !== 'ordem'
   );
 
@@ -330,6 +416,13 @@ export default function Prioridades() {
         result = result.filter((d) => (d.etiqueta || '').toLowerCase() === filtros.prioridade.toLowerCase());
       }
     }
+    if (filtros.complexidade && filtros.complexidade !== '__all__') {
+      result = result.filter((d) => {
+        const compCfg = complexidadeConfig(d.complexidade);
+        const val = compCfg ? compCfg.valor : (d.complexidade || 'normal').toLowerCase();
+        return val === filtros.complexidade.toLowerCase();
+      });
+    }
     if (filtros.etapa && filtros.etapa !== '__all__') {
       result = result.filter((d) => (d.fase_arte || '').toLowerCase() === filtros.etapa.toLowerCase());
     }
@@ -350,60 +443,89 @@ export default function Prioridades() {
       }
     }
 
-    // Ordenação por colunas da tabela
-    if (sortConfig.key === 'prioridade') {
-      const prioWeight = { urgente: 3, alta: 2, rotina: 1 };
-      result = [...result].sort((a, b) => {
-        const pA = prioWeight[(a.etiqueta || '').toLowerCase()] || 0;
-        const pB = prioWeight[(b.etiqueta || '').toLowerCase()] || 0;
-        const diff = pB - pA;
-        return sortConfig.direction === 'asc' ? diff : -diff;
-      });
-    } else if (sortConfig.key === 'cliente') {
-      result = [...result].sort((a, b) => {
-        const diff = (a.cliente || '').localeCompare(b.cliente || '', 'pt-BR', { sensitivity: 'base' });
-        return sortConfig.direction === 'asc' ? diff : -diff;
-      });
-    } else if (sortConfig.key === 'prazo') {
-      result = [...result].sort((a, b) => {
-        if (!a.prazo && !b.prazo) return 0;
-        if (!a.prazo) return 1;
-        if (!b.prazo) return -1;
-        const diff = new Date(a.prazo) - new Date(b.prazo);
-        return sortConfig.direction === 'asc' ? diff : -diff;
-      });
-    } else if (sortConfig.key === 'etapa') {
-      const etapaIdx = { iniciando: 1, no_meio: 2, finalizando: 3 };
-      result = [...result].sort((a, b) => {
-        const eA = etapaIdx[a.fase_arte] || 0;
-        const eB = etapaIdx[b.fase_arte] || 0;
-        const diff = eA - eB;
-        return sortConfig.direction === 'asc' ? diff : -diff;
-      });
-    } else if (sortConfig.key === 'status') {
-      result = [...result].sort((a, b) => {
-        const sA = statusMap[a.status_id]?.ordem ?? 99;
-        const sB = statusMap[b.status_id]?.ordem ?? 99;
-        const diff = sA - sB;
-        return sortConfig.direction === 'asc' ? diff : -diff;
-      });
-    } else if (sortConfig.key === 'responsavel') {
-      result = [...result].sort((a, b) => {
-        const respA = `${a.designer || ''} ${a.vendedor || ''}`;
-        const respB = `${b.designer || ''} ${b.vendedor || ''}`;
-        const diff = respA.localeCompare(respB, 'pt-BR', { sensitivity: 'base' });
-        return sortConfig.direction === 'asc' ? diff : -diff;
-      });
+    // Ordenação (por colunas da tabela ou pelo dropdown de Ordenação)
+    if (sortConfig.key !== 'ordem') {
+      if (sortConfig.key === 'prioridade') {
+        const prioWeight = { urgente: 3, alta: 2, rotina: 1 };
+        result = [...result].sort((a, b) => {
+          const pA = prioWeight[(a.etiqueta || '').toLowerCase()] || 0;
+          const pB = prioWeight[(b.etiqueta || '').toLowerCase()] || 0;
+          const diff = pB - pA;
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      } else if (sortConfig.key === 'cliente') {
+        result = [...result].sort((a, b) => {
+          const diff = (a.cliente || '').localeCompare(b.cliente || '', 'pt-BR', { sensitivity: 'base' });
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      } else if (sortConfig.key === 'prazo') {
+        result = [...result].sort((a, b) => {
+          const scoreA = calcularScorePrazoProximo(a.prazo);
+          const scoreB = calcularScorePrazoProximo(b.prazo);
+          const diff = scoreA - scoreB;
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      } else if (sortConfig.key === 'etapa') {
+        const etapaIdx = { iniciando: 1, no_meio: 2, finalizando: 3 };
+        result = [...result].sort((a, b) => {
+          const eA = etapaIdx[a.fase_arte] || 0;
+          const eB = etapaIdx[b.fase_arte] || 0;
+          const diff = eA - eB;
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      } else if (sortConfig.key === 'complexidade') {
+        const compWeight = { facil: 1, normal: 2, dificil: 3, complexo: 4 };
+        result = [...result].sort((a, b) => {
+          const cA = compWeight[complexidadeConfig(a.complexidade)?.valor || 'normal'] || 2;
+          const cB = compWeight[complexidadeConfig(b.complexidade)?.valor || 'normal'] || 2;
+          const diff = cA - cB;
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      } else if (sortConfig.key === 'status') {
+        result = [...result].sort((a, b) => {
+          const sA = statusMap[a.status_id]?.ordem ?? 99;
+          const sB = statusMap[b.status_id]?.ordem ?? 99;
+          const diff = sA - sB;
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      } else if (sortConfig.key === 'responsavel') {
+        result = [...result].sort((a, b) => {
+          const respA = `${a.designer || ''} ${a.vendedor || ''}`;
+          const respB = `${b.designer || ''} ${b.vendedor || ''}`;
+          const diff = respA.localeCompare(respB, 'pt-BR', { sensitivity: 'base' });
+          return sortConfig.direction === 'asc' ? diff : -diff;
+        });
+      }
     } else {
-      // Ordem padrão da fila
-      result = [...result].sort((a, b) => {
-        const diff = (a.ordem ?? 0) - (b.ordem ?? 0);
-        return sortConfig.direction === 'asc' ? diff : -diff;
-      });
+      // Ordenação selecionada no dropdown
+      if (ordenacao === 'recentes') {
+        result = [...result].sort((a, b) => {
+          const timeA = new Date(a.created_date || a.created_at || a.data_criacao || 0).getTime() || 0;
+          const timeB = new Date(b.created_date || b.created_at || b.data_criacao || 0).getTime() || 0;
+          if (timeB !== timeA) return timeB - timeA;
+          return String(b.id || '').localeCompare(String(a.id || ''));
+        });
+      } else if (ordenacao === 'prazo') {
+        result = [...result].sort((a, b) => {
+          const scoreA = calcularScorePrazoProximo(a.prazo);
+          const scoreB = calcularScorePrazoProximo(b.prazo);
+          return scoreA - scoreB;
+        });
+      } else if (ordenacao === 'cliente') {
+        result = [...result].sort((a, b) => {
+          return (a.cliente || '').localeCompare(b.cliente || '', 'pt-BR', { sensitivity: 'base' });
+        });
+      } else {
+        // 'prioridade' -> Ordem natural manual da fila
+        result = [...result].sort((a, b) => {
+          const diff = (a.ordem ?? 0) - (b.ordem ?? 0);
+          return diff;
+        });
+      }
     }
 
     return result;
-  }, [ativas, filtros, sortConfig, statusMap, usuario]);
+  }, [ativas, filtros, ordenacao, sortConfig, statusMap, usuario]);
 
   const designers = useMemo(() => {
     if (designersCadastrados && designersCadastrados.length > 0) {
@@ -503,6 +625,17 @@ export default function Prioridades() {
     return map;
   }, [ativas]);
 
+  const complexidadeDemandCounts = useMemo(() => {
+    const map = { facil: 0, normal: 0, dificil: 0, complexo: 0 };
+    ativas.forEach((d) => {
+      const cfg = complexidadeConfig(d.complexidade);
+      const k = cfg ? cfg.valor : (d.complexidade || 'normal').toLowerCase();
+      if (map[k] !== undefined) map[k]++;
+      else map.normal++;
+    });
+    return map;
+  }, [ativas]);
+
   const prazoDemandCounts = useMemo(() => {
     const map = { hoje: 0, atrasadas: 0, esta_semana: 0, com_data: 0, sem_data: 0 };
     ativas.forEach((d) => {
@@ -531,12 +664,28 @@ export default function Prioridades() {
   }, [demandaSelecionadaId, visiveis, ativas]);
 
   async function onDragEnd(result) {
-    if (!result.destination || result.source.index === result.destination.index) return;
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
     if (!can('priority_reorder')) return;
 
+    // Caso 1: Arrastando entre colunas do Kanban (droppableId = "coluna_status_id")
+    if (source.droppableId.startsWith('coluna_') || destination.droppableId.startsWith('coluna_')) {
+      const novoStatusId = destination.droppableId.replace('coluna_', '');
+      const demandaMovida = ativas.find((d) => d.id === draggableId);
+      if (!demandaMovida) return;
+
+      // Se mudou de coluna/status
+      if (demandaMovida.status_id !== novoStatusId) {
+        await quickUpdateDemanda(demandaMovida, { status_id: novoStatusId });
+      }
+      return;
+    }
+
+    // Caso 2: Reordenação na lista principal (droppableId = "fila")
     const itens = [...ativas];
-    const [movido] = itens.splice(result.source.index, 1);
-    itens.splice(result.destination.index, 0, movido);
+    const [movido] = itens.splice(source.index, 1);
+    itens.splice(destination.index, 0, movido);
 
     // Atualiza ordem e design_position sem alterar factory_position
     const novos = itens.map((d, i) => ({ id: d.id, ordem: i, design_position: i }));
@@ -547,11 +696,11 @@ export default function Prioridades() {
     );
 
     // Registra alteração de prioridade no histórico do card movido
-    const entradaHist = entradaReordenacaoPrioridade(result.source.index, result.destination.index, usuario);
+    const entradaHist = entradaReordenacaoPrioridade(source.index, destination.index, usuario);
     const movidoAtualizado = {
       ...movido,
-      ordem: result.destination.index,
-      design_position: result.destination.index,
+      ordem: destination.index,
+      design_position: destination.index,
       historico: [entradaHist, ...(movido.historico || [])],
     };
 
@@ -559,6 +708,78 @@ export default function Prioridades() {
       await localClient.entities.Demanda.bulkUpdate(novos);
       await localClient.entities.Demanda.update(movido.id, { historico: movidoAtualizado.historico });
     } catch {
+      carregar();
+    }
+  }
+
+  async function definirComoPrioridade(demanda) {
+    if (!demanda) return;
+    if (!can('priority_reorder')) return;
+
+    const todasAtivas = [...ativas];
+    const indexAtual = todasAtivas.findIndex((d) => d.id === demanda.id);
+    if (indexAtual === -1) return;
+
+    // Se já estiver no topo e sem filtros, apenas seleciona
+    if (indexAtual === 0 && !filtrando) {
+      setDemandaSelecionadaId(demanda.id);
+      return;
+    }
+
+    // Remove da posição atual e insere no topo (#01)
+    const [movido] = todasAtivas.splice(indexAtual, 1);
+    todasAtivas.unshift(movido);
+
+    const novos = todasAtivas.map((d, i) => ({ id: d.id, ordem: i, design_position: i }));
+    const ordemMap = Object.fromEntries(todasAtivas.map((d, i) => [d.id, i]));
+
+    setDemandas((prev) =>
+      prev.map((d) => (ordemMap[d.id] !== undefined ? { ...d, ordem: ordemMap[d.id], design_position: ordemMap[d.id] } : d))
+    );
+
+    // Reseta filtros e ordenação para que a fila fique limpa e o destaque laranja apareça no topo
+    setFiltros({
+      busca: '',
+      aba: 'todas',
+      vendedor: '',
+      revenda: '',
+      designer: '',
+      status: '',
+      prioridade: '',
+      complexidade: '',
+      etapa: '',
+    });
+    setOrdenacao('prioridade');
+    setSortConfig({ key: 'ordem', direction: 'asc' });
+    setDemandaSelecionadaId(demanda.id);
+
+    const entradaHist = entradaReordenacaoPrioridade(indexAtual, 0, usuario);
+    const movidoAtualizado = {
+      ...movido,
+      ordem: 0,
+      design_position: 0,
+      historico: [entradaHist, ...(movido.historico || [])],
+    };
+
+    try {
+      await localClient.entities.Demanda.bulkUpdate(novos);
+      await localClient.entities.Demanda.update(movido.id, { historico: movidoAtualizado.historico });
+
+      emitirNotificacao({
+        demanda: movido,
+        autor: usuario,
+        tipo: NOTIFICATION_TYPES.PRIORIDADE,
+        titulo: 'Definida como Prioridade 1',
+        mensagem: `${usuario?.nome || 'Alguém'} definiu "${demanda.cliente}" como a Prioridade nº 1 da fila.`,
+        link_path: '/',
+      });
+
+      toast({
+        title: 'Prioridade definida',
+        description: `"${demanda.cliente}" foi definida como a Prioridade nº 1 da fila.`,
+      });
+    } catch (err) {
+      console.error('Erro ao definir como prioridade:', err);
       carregar();
     }
   }
@@ -892,6 +1113,231 @@ export default function Prioridades() {
     return novo;
   }
 
+  // --- CONTROLE DE SELEÇÃO EM MASSA (COM SUPORTE A SHIFT) ---
+  const toggleSelectDemanda = useCallback(
+    (id, checked, isShiftPressed = false) => {
+      setSelecionadosIds((prev) => {
+        const next = new Set(prev);
+
+        if (isShiftPressed && lastSelectedId && lastSelectedId !== id) {
+          const indexAtual = visiveis.findIndex((d) => d.id === id);
+          const indexAnterior = visiveis.findIndex((d) => d.id === lastSelectedId);
+
+          if (indexAtual !== -1 && indexAnterior !== -1) {
+            const inicio = Math.min(indexAtual, indexAnterior);
+            const fim = Math.max(indexAtual, indexAnterior);
+            for (let i = inicio; i <= fim; i++) {
+              if (checked) {
+                next.add(visiveis[i].id);
+              } else {
+                next.delete(visiveis[i].id);
+              }
+            }
+            return next;
+          }
+        }
+
+        if (checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+        return next;
+      });
+
+      setLastSelectedId(id);
+    },
+    [lastSelectedId, visiveis]
+  );
+
+  const todosVisiveisSelecionados = useMemo(() => {
+    if (visiveis.length === 0) return false;
+    return visiveis.every((d) => selecionadosIds.has(d.id));
+  }, [visiveis, selecionadosIds]);
+
+  const algunsVisiveisSelecionados = useMemo(() => {
+    return visiveis.some((d) => selecionadosIds.has(d.id)) && !todosVisiveisSelecionados;
+  }, [visiveis, selecionadosIds, todosVisiveisSelecionados]);
+
+  const toggleSelectTodos = useCallback(() => {
+    setSelecionadosIds((prev) => {
+      const next = new Set(prev);
+      if (todosVisiveisSelecionados) {
+        visiveis.forEach((d) => next.delete(d.id));
+      } else {
+        visiveis.forEach((d) => next.add(d.id));
+      }
+      return next;
+    });
+  }, [todosVisiveisSelecionados, visiveis]);
+
+  const limparSelecao = useCallback(() => {
+    setSelecionadosIds(new Set());
+    setLastSelectedId(null);
+  }, []);
+
+  // --- AÇÕES EM MASSA ---
+  const handleAplicarRevendaEmLote = async (novaRevenda) => {
+    const ids = Array.from(selecionadosIds);
+    if (ids.length === 0 || !novaRevenda) return;
+
+    try {
+      const updates = ids.map((id) => ({
+        id,
+        revenda: novaRevenda,
+      }));
+      await localClient.entities.Demanda.bulkUpdate(updates);
+
+      // Registrar auditoria para cada uma
+      ids.forEach((id) => {
+        const d = demandas.find((item) => item.id === id);
+        registrarAuditoria('Demanda', id, 'update', {
+          campo: 'revenda',
+          valor_novo: novaRevenda,
+          mensagem: `Revenda definida em lote como "${novaRevenda}" para ${d?.cliente || 'demanda'}.`,
+        });
+      });
+
+      setDemandas((prev) =>
+        prev.map((d) => (selecionadosIds.has(d.id) ? { ...d, revenda: novaRevenda } : d))
+      );
+      toast({
+        title: 'Revenda atualizada em lote!',
+        description: `Revenda "${novaRevenda}" aplicada a ${ids.length} ${ids.length === 1 ? 'demanda' : 'demandas'}.`,
+      });
+      setModalLoteRevendaOpen(false);
+      setRevendaLoteSelecionada('');
+      limparSelecao();
+    } catch (err) {
+      toast({
+        title: 'Erro ao atualizar revenda em lote',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleAplicarStatusEmLote = async (novoStatusId) => {
+    const ids = Array.from(selecionadosIds);
+    if (ids.length === 0 || !novoStatusId) return;
+
+    try {
+      const updates = ids.map((id) => ({
+        id,
+        status_id: novoStatusId,
+      }));
+      await localClient.entities.Demanda.bulkUpdate(updates);
+
+      const stObj = statuses.find((s) => s.id === novoStatusId);
+      ids.forEach((id) => {
+        registrarAuditoria('Demanda', id, 'update', {
+          campo: 'status_id',
+          valor_novo: novoStatusId,
+          mensagem: `Status atualizado em lote para "${stObj?.nome || novoStatusId}".`,
+        });
+      });
+
+      setDemandas((prev) =>
+        prev.map((d) => (selecionadosIds.has(d.id) ? { ...d, status_id: novoStatusId } : d))
+      );
+      toast({
+        title: 'Status atualizado em lote!',
+        description: `${ids.length} ${ids.length === 1 ? 'demanda alterada' : 'demandas alteradas'}.`,
+      });
+      setModalLoteStatusOpen(false);
+      setStatusLoteSelecionado('');
+      limparSelecao();
+    } catch (err) {
+      toast({
+        title: 'Erro ao alterar status',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleAplicarDesignerEmLote = async (novoDesigner) => {
+    const ids = Array.from(selecionadosIds);
+    if (ids.length === 0) return;
+
+    try {
+      const updates = ids.map((id) => ({
+        id,
+        designer: novoDesigner,
+      }));
+      await localClient.entities.Demanda.bulkUpdate(updates);
+
+      setDemandas((prev) =>
+        prev.map((d) => (selecionadosIds.has(d.id) ? { ...d, designer: novoDesigner } : d))
+      );
+      toast({
+        title: 'Designer atribuído em lote!',
+        description: `${ids.length} ${ids.length === 1 ? 'demanda atualizada' : 'demandas atualizadas'}.`,
+      });
+      setModalLoteDesignerOpen(false);
+      setDesignerLoteSelecionado('');
+      limparSelecao();
+    } catch (err) {
+      toast({
+        title: 'Erro ao atribuir designer',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleConcluirEmLote = async () => {
+    const ids = Array.from(selecionadosIds);
+    if (ids.length === 0) return;
+
+    try {
+      const agora = new Date().toISOString();
+      const updates = ids.map((id) => ({
+        id,
+        concluida: true,
+        data_conclusao: agora,
+      }));
+      await localClient.entities.Demanda.bulkUpdate(updates);
+
+      setDemandas((prev) =>
+        prev.map((d) => (selecionadosIds.has(d.id) ? { ...d, concluida: true, data_conclusao: agora } : d))
+      );
+      toast({
+        title: 'Demandas concluídas em lote!',
+        description: `${ids.length} ${ids.length === 1 ? 'demanda marcada como concluída' : 'demandas marcadas como concluídas'}.`,
+      });
+      limparSelecao();
+    } catch (err) {
+      toast({
+        title: 'Erro ao concluir demandas',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleExcluirEmLote = async () => {
+    const ids = Array.from(selecionadosIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Tem certeza que deseja excluir ${ids.length} demandas selecionadas?`)) return;
+
+    try {
+      await Promise.all(ids.map((id) => localClient.entities.Demanda.delete(id)));
+      setDemandas((prev) => prev.filter((d) => !selecionadosIds.has(d.id)));
+      toast({
+        title: 'Demandas excluídas',
+        description: `${ids.length} demandas foram removidas.`,
+      });
+      limparSelecao();
+    } catch (err) {
+      toast({
+        title: 'Erro ao excluir demandas',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (!can('priority_view')) {
     return <AcessoNegado mensagem="Você não possui permissão para visualizar a área de Prioridades." />;
   }
@@ -901,40 +1347,7 @@ export default function Prioridades() {
       {/* Coluna Principal da Esquerda: Header, Filtros, Tabela e Paginação */}
       <div className="flex-1 min-w-0 w-full space-y-6">
         
-        {/* Header da Página */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-[28px] font-bold text-foreground tracking-tight">
-              Demandas
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              {loading ? 'Carregando demandas...' : `${ativas.length} demandas ativas`}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5 sm:self-center">
-            {can('priority_create') && (
-              <Button
-                variant="outline"
-                onClick={() => setCsvImportOpen(true)}
-                className="border-border bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground font-medium text-xs sm:text-sm h-9 px-3.5 rounded-lg transition"
-              >
-                <FileSpreadsheet size={15} className="mr-1.5 shrink-0 opacity-80" /> Importar CSV
-              </Button>
-            )}
-
-            {can('priority_create') && (
-              <Button
-                onClick={abrirNovo}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-xs sm:text-sm h-9 px-3.5 rounded-lg shadow-sm transition"
-              >
-                <Plus size={16} className="mr-1 shrink-0 stroke-[2.5]" /> Nova demanda
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Faixa de Navegação Rápida, Busca e Filtros */}
+        {/* Faixa de Navegação Rápida, Busca, Filtros e Ações */}
         <div>
           <Filtros
             filtros={filtros}
@@ -944,8 +1357,33 @@ export default function Prioridades() {
             designers={designers}
             statuses={statuses}
             ordenacao={ordenacao}
-            setOrdenacao={setOrdenacao}
+            setOrdenacao={(op) => {
+              setOrdenacao(op);
+              setSortConfig({ key: 'ordem', direction: 'asc' });
+            }}
             contadores={contadores}
+            viewMode={viewMode}
+            onViewModeChange={handleSetViewMode}
+            acoesExtras={
+              can('priority_create') && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCsvImportOpen(true)}
+                    className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground font-medium text-xs sm:text-sm h-10 px-3.5 rounded-lg transition"
+                  >
+                    <FileSpreadsheet size={15} className="mr-1.5 shrink-0 opacity-80" /> Importar CSV
+                  </Button>
+
+                  <Button
+                    onClick={abrirNovo}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-xs sm:text-sm h-10 px-3.5 rounded-lg shadow-sm transition"
+                  >
+                    <Plus size={16} className="mr-1 shrink-0 stroke-[2.5]" /> Nova demanda
+                  </Button>
+                </>
+              )
+            }
           />
         </div>
 
@@ -963,20 +1401,153 @@ export default function Prioridades() {
           <div className="text-center py-20 text-muted-foreground rounded-2xl border border-dashed border-border bg-card/40 p-8">
             {filtrando ? 'Nenhuma demanda encontrada com os filtros.' : 'Nenhuma demanda ativa. Clique em "+ Nova demanda" para começar.'}
           </div>
+        ) : viewMode === 'kanban' ? (
+          /* Visualização em Kanban por Status */
+          <DragDropContext onDragEnd={onDragEnd}>
+            <PrioridadesKanban
+              statuses={statuses}
+              demandas={visiveis}
+              statusMap={statusMap}
+              vendedores={vendedores}
+              designers={designers}
+              revendas={revendas}
+              onSelectDemanda={(dem) => {
+                setDemandaSelecionadaId((prev) => (prev === dem.id ? null : dem.id));
+                setDrawerTab('detalhes');
+              }}
+              demandaSelecionadaId={demandaSelecionadaId}
+              onQuickUpdate={quickUpdateDemanda}
+              onEdit={(dem) => {
+                setDemandaSelecionadaId(dem.id);
+                setDrawerTab('detalhes');
+              }}
+              onDelete={abrirModalExcluir}
+              onConcluir={concluirDemanda}
+              onEnviarParaImpressao={enviarParaImpressao}
+              onRegistrarAlteracao={(dem) => {
+                setDemandaSelecionadaId(dem.id);
+                setDrawerTab('alteracoes');
+                setDrawerSubTab('todas');
+              }}
+              onDuplicar={duplicarDemanda}
+              onVerHistorico={(dem) => {
+                setDemandaSelecionadaId(dem.id);
+                setDrawerTab('alteracoes');
+                setDrawerSubTab('todas');
+              }}
+              onDefinirComoPrioridade={definirComoPrioridade}
+              canEdit={can('priority_edit')}
+              canReorder={can('priority_reorder')}
+              filtrando={filtrando}
+            />
+          </DragDropContext>
         ) : (
-          /* Tabela Principal */
+          /* Tabela Principal (Lista) */
           <div className="space-y-3">
+            {/* Barra Flutuante / Destaque de Ações em Massa */}
+            {selecionadosIds.size > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 bg-primary/10 border border-primary/30 rounded-xl shadow-sm text-xs animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 px-2 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[11px]">
+                    {selecionadosIds.size}
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {selecionadosIds.size === 1 ? 'demanda selecionada' : 'demandas selecionadas'}
+                  </span>
+                </div>
+
+                <div className="flex items-center flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setRevendaLoteSelecionada('');
+                      setModalLoteRevendaOpen(true);
+                    }}
+                    className="h-7.5 px-2.5 text-xs font-semibold border-primary/30 bg-card hover:bg-primary hover:text-primary-foreground transition cursor-pointer"
+                  >
+                    <Building2 size={13} className="mr-1.5 opacity-80" />
+                    Definir Revenda
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setStatusLoteSelecionado('');
+                      setModalLoteStatusOpen(true);
+                    }}
+                    className="h-7.5 px-2.5 text-xs font-medium border-border bg-card hover:bg-muted transition cursor-pointer"
+                  >
+                    <Sparkles size={13} className="mr-1.5 opacity-70" />
+                    Alterar Status
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setDesignerLoteSelecionado('');
+                      setModalLoteDesignerOpen(true);
+                    }}
+                    className="h-7.5 px-2.5 text-xs font-medium border-border bg-card hover:bg-muted transition cursor-pointer"
+                  >
+                    <Palette size={13} className="mr-1.5 opacity-70" />
+                    Atribuir Designer
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleConcluirEmLote}
+                    className="h-7.5 px-2.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/20 hover:bg-emerald-500/20 transition cursor-pointer"
+                  >
+                    <Check size={13} className="mr-1.5 stroke-[2.5]" />
+                    Concluir
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleExcluirEmLote}
+                    className="h-7.5 px-2 text-xs font-medium text-destructive hover:bg-destructive/10 cursor-pointer"
+                    title="Excluir selecionadas"
+                  >
+                    Excluir
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={limparSelecao}
+                    className="h-7.5 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1 ml-1"
+                    title="Desmarcar seleção"
+                  >
+                    <X size={13} />
+                    Limpar
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
               {/* 1. Cabeçalho da tabela com colunas e menus de filtro interativos: #, PRIORIDADE, CLIENTE / DEMANDA, PRAZO, ETAPA, STATUS, D / V, AÇÕES */}
               <div className="w-full grid grid-cols-12 items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 bg-muted/40 border-b border-border text-[11px] font-bold text-muted-foreground/80 uppercase tracking-wider select-none">
-                {/* 1. # (Ordem) */}
-                <div
-                  onClick={() => handleSort('ordem')}
-                  className="col-span-1 flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
-                  title="Ordenar por Posição na Fila"
-                >
-                  <span>#</span>
-                  {getSortIcon('ordem')}
+                {/* 1. # (Ordem + Seleção Todos) */}
+                <div className="col-span-1 flex items-center gap-1.5 min-w-0">
+                  <Checkbox
+                    checked={todosVisiveisSelecionados ? true : algunsVisiveisSelecionados ? 'indeterminate' : false}
+                    onCheckedChange={toggleSelectTodos}
+                    className="h-3.5 w-3.5 rounded border-muted-foreground/40 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                    title={todosVisiveisSelecionados ? 'Desmarcar todos' : 'Selecionar todos'}
+                  />
+                  <div
+                    onClick={() => handleSort('ordem')}
+                    className="flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors group"
+                    title="Ordenar por Posição na Fila"
+                  >
+                    <span>#</span>
+                    {getSortIcon('ordem')}
+                  </div>
                 </div>
 
                 {/* 2. PRIORIDADE */}
@@ -1281,99 +1852,9 @@ export default function Prioridades() {
                   </PopoverContent>
                 </Popover>
 
-                {/* 5. ETAPA */}
+                {/* 5. STATUS */}
                 <Popover>
-                  <div className="hidden md:flex md:col-span-3 lg:col-span-2 xl:col-span-2 items-center justify-between gap-1 group">
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
-                          filtros.etapa ? 'text-primary' : 'text-muted-foreground/80'
-                        }`}
-                        title="Filtrar por Etapa da Arte"
-                      >
-                        <span>ETAPA</span>
-                        {filtros.etapa ? (
-                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
-                            1
-                          </span>
-                        ) : (
-                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleSort('etapa'); }}
-                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
-                      title="Ordenar por etapa"
-                    >
-                      {getSortIcon('etapa')}
-                    </button>
-                  </div>
-                  <PopoverContent className="w-60 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
-                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
-                      <span className="font-bold text-foreground flex items-center gap-1.5">
-                        <Layers size={13} className="text-primary" /> Filtrar Etapa
-                      </span>
-                      {filtros.etapa && (
-                        <button
-                          type="button"
-                          onClick={() => setFiltros((prev) => ({ ...prev, etapa: '' }))}
-                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
-                        >
-                          <X size={11} /> Limpar
-                        </button>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: '' }))}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
-                          !filtros.etapa ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
-                        }`}
-                      >
-                        <span>Todas as etapas</span>
-                        <span className="text-[10px] opacity-70">({ativas.length})</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'iniciando' }))}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
-                          filtros.etapa === 'iniciando' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
-                        }`}
-                      >
-                        <span>🎨 Fase 1 (Iniciando)</span>
-                        <span className="text-[10px] opacity-70">({etapaDemandCounts.iniciando || 0})</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'no_meio' }))}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
-                          filtros.etapa === 'no_meio' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
-                        }`}
-                      >
-                        <span>✏️ Fase 2 (Ajustes / Em andamento)</span>
-                        <span className="text-[10px] opacity-70">({etapaDemandCounts.no_meio || 0})</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'finalizando' }))}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
-                          filtros.etapa === 'finalizando' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
-                        }`}
-                      >
-                        <span>✨ Fase 3 (Finalizando)</span>
-                        <span className="text-[10px] opacity-70">({etapaDemandCounts.finalizando || 0})</span>
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                {/* 6. STATUS */}
-                <Popover>
-                  <div className="hidden lg:flex lg:col-span-2 xl:col-span-2 items-center justify-between gap-1 group">
+                  <div className="hidden lg:flex lg:col-span-2 items-center justify-between gap-1 group">
                     <PopoverTrigger asChild>
                       <button
                         type="button"
@@ -1455,7 +1936,176 @@ export default function Prioridades() {
                   </PopoverContent>
                 </Popover>
 
-                {/* 7. D / V (DESIGNER / VENDEDOR) */}
+                {/* 6. ETAPA */}
+                <Popover>
+                  <div className="hidden md:flex md:col-span-2 lg:col-span-1 items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.etapa ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Etapa da Arte"
+                      >
+                        <span>ETAPA</span>
+                        {filtros.etapa ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            1
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('etapa'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por etapa"
+                    >
+                      {getSortIcon('etapa')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-60 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Layers size={13} className="text-primary" /> Filtrar Etapa
+                      </span>
+                      {filtros.etapa && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, etapa: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: '' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          !filtros.etapa ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span>Todas as etapas</span>
+                        <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'iniciando' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'iniciando' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>🎨 Fase 1 (Iniciando)</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.iniciando || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'no_meio' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'no_meio' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>✏️ Fase 2 (Ajustes)</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.no_meio || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'finalizando' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'finalizando' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>✨ Fase 3 (Finalizando)</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.finalizando || 0})</span>
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* 7. COMPLEXIDADE */}
+                <Popover>
+                  <div className="hidden md:flex md:col-span-2 lg:col-span-1 items-center justify-between gap-1 group">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${
+                          filtros.complexidade ? 'text-primary' : 'text-muted-foreground/80'
+                        }`}
+                        title="Filtrar por Complexidade"
+                      >
+                        <span>COMPLEXIDADE</span>
+                        {filtros.complexidade ? (
+                          <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
+                            1
+                          </span>
+                        ) : (
+                          <Filter size={10} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSort('complexidade'); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ordenar por complexidade"
+                    >
+                      {getSortIcon('complexidade')}
+                    </button>
+                  </div>
+                  <PopoverContent className="w-60 p-2.5 text-xs space-y-2 bg-popover border-border shadow-md" align="start">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <SlidersHorizontal size={13} className="text-primary" /> Filtrar Complexidade
+                      </span>
+                      {filtros.complexidade && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltros((prev) => ({ ...prev, complexidade: '' }))}
+                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                        >
+                          <X size={11} /> Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, complexidade: '' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          !filtros.complexidade ? 'bg-secondary font-bold text-foreground' : 'hover:bg-muted/60 text-muted-foreground'
+                        }`}
+                      >
+                        <span>Todas as complexidades</span>
+                        <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      {COMPLEXIDADES.map((c) => {
+                        const isSel = (filtros.complexidade || '').toLowerCase() === c.valor;
+                        const count = complexidadeDemandCounts[c.valor] || 0;
+                        return (
+                          <button
+                            key={c.valor}
+                            type="button"
+                            onClick={() => setFiltros((prev) => ({ ...prev, complexidade: isSel ? '' : c.valor }))}
+                            className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                              isSel ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                            }`}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.cor }} /> {c.label}
+                            </span>
+                            <span className="text-[10px] opacity-70">({count})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* 8. D / V (DESIGNER / VENDEDOR) */}
                 <Popover>
                   <div className="hidden lg:flex lg:col-span-1 items-center justify-between gap-1 group">
                     <PopoverTrigger asChild>
@@ -1674,11 +2324,14 @@ export default function Prioridades() {
                             setDrawerTab('alteracoes');
                             setDrawerSubTab('todas');
                           }}
+                          onDefinirComoPrioridade={definirComoPrioridade}
                           onSelectRow={(dem) => {
                             setDemandaSelecionadaId((prev) => (prev === dem.id ? null : dem.id));
                             setDrawerTab('detalhes');
                           }}
                           isSelected={demandaSelecionadaId === d.id}
+                          isBulkSelected={selecionadosIds.has(d.id)}
+                          onToggleBulkSelect={toggleSelectDemanda}
                           dragDisabled={filtrando || !can('priority_reorder')}
                           destaque={i === 0 && !filtrando}
                           viewMode="lista"
@@ -1742,7 +2395,7 @@ export default function Prioridades() {
 
       {/* Coluna da Direita: Drawer Lateral de Detalhes da Demanda Selecionada */}
       {demandaSelecionadaObj && (
-        <div className="w-full lg:w-[410px] shrink-0 rounded-xl border border-border overflow-hidden shadow-xl sticky top-20 bg-card">
+        <div className="w-full lg:w-[470px] shrink-0 rounded-xl border border-border overflow-hidden shadow-xl sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] bg-card flex flex-col mb-4">
           <DemandaDrawer
             demanda={demandaSelecionadaObj.demanda}
             index={demandaSelecionadaObj.index}
@@ -1766,6 +2419,7 @@ export default function Prioridades() {
               });
             }}
             onQuickUpdate={quickUpdateDemanda}
+            onDefinirComoPrioridade={definirComoPrioridade}
           />
         </div>
       )}
@@ -1861,6 +2515,211 @@ export default function Prioridades() {
         status={demandaParaExcluir ? statusMap[demandaParaExcluir.status_id] : null}
         loading={excluindoDemanda}
       />
+
+      {/* Modal: Definir Revenda em Massa */}
+      <Dialog open={modalLoteRevendaOpen} onOpenChange={setModalLoteRevendaOpen}>
+        <DialogContent className="sm:max-w-md bg-card border-border shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Building2 size={18} className="text-primary" />
+              Definir Revenda em Massa
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Selecione uma revenda existente ou digite o nome para aplicar a todas as {selecionadosIds.size} demandas selecionadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                Escolher revenda:
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {revendas.map((r) => {
+                  const rNome = r.nome || r.value || r.label;
+                  const isSel = revendaLoteSelecionada.toLowerCase().trim() === rNome.toLowerCase().trim();
+                  return (
+                    <button
+                      key={r.id || rNome}
+                      type="button"
+                      onClick={() => setRevendaLoteSelecionada(rNome)}
+                      className={`flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition cursor-pointer ${
+                        isSel
+                          ? 'border-primary bg-primary/10 text-primary font-bold'
+                          : 'border-border/60 hover:border-border hover:bg-muted/50 text-foreground'
+                      }`}
+                    >
+                      <UserAvatar name={rNome} src={r.logo_url} size="xs" />
+                      <span className="truncate">{rNome}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">
+                Ou digite uma revenda personalizada:
+              </label>
+              <Input
+                placeholder="Ex: iPapel, Grafica X..."
+                value={revendaLoteSelecionada}
+                onChange={(e) => setRevendaLoteSelecionada(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalLoteRevendaOpen(false)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              disabled={!revendaLoteSelecionada.trim()}
+              onClick={() => handleAplicarRevendaEmLote(revendaLoteSelecionada.trim())}
+              className="text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Aplicar a {selecionadosIds.size} {selecionadosIds.size === 1 ? 'demanda' : 'demandas'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Alterar Status em Massa */}
+      <Dialog open={modalLoteStatusOpen} onOpenChange={setModalLoteStatusOpen}>
+        <DialogContent className="sm:max-w-md bg-card border-border shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Sparkles size={18} className="text-primary" />
+              Alterar Status em Massa
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Escolha o novo status para aplicar a {selecionadosIds.size} demandas selecionadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5 py-2 max-h-60 overflow-y-auto">
+            {statuses.map((st) => {
+              const isSel = statusLoteSelecionado === st.id;
+              const { cor } = getStatusColor(st.nome);
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setStatusLoteSelecionado(st.id)}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left text-xs transition cursor-pointer ${
+                    isSel
+                      ? 'border-primary bg-primary/10 text-primary font-bold'
+                      : 'border-border/60 hover:border-border hover:bg-muted/50 text-foreground'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cor }} />
+                    <span>{st.nome}</span>
+                  </span>
+                  {isSel && <Check size={14} className="text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalLoteStatusOpen(false)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              disabled={!statusLoteSelecionado}
+              onClick={() => handleAplicarStatusEmLote(statusLoteSelecionado)}
+              className="text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Confirmar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Atribuir Designer em Massa */}
+      <Dialog open={modalLoteDesignerOpen} onOpenChange={setModalLoteDesignerOpen}>
+        <DialogContent className="sm:max-w-md bg-card border-border shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Palette size={18} className="text-primary" />
+              Atribuir Designer em Massa
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Selecione o designer para atribuir às {selecionadosIds.size} demandas selecionadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5 py-2 max-h-60 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setDesignerLoteSelecionado('')}
+              className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left text-xs transition cursor-pointer ${
+                designerLoteSelecionado === ''
+                  ? 'border-primary bg-primary/10 text-primary font-bold'
+                  : 'border-border/60 hover:border-border hover:bg-muted/50 text-foreground'
+              }`}
+            >
+              <span className="italic text-muted-foreground">Sem designer (desatribuir)</span>
+              {designerLoteSelecionado === '' && <Check size={14} className="text-primary" />}
+            </button>
+
+            {designers.map((des) => {
+              const dNome = des.nome || des.value || des.label;
+              const isSel = designerLoteSelecionado.toLowerCase().trim() === dNome.toLowerCase().trim();
+              return (
+                <button
+                  key={des.id || dNome}
+                  type="button"
+                  onClick={() => setDesignerLoteSelecionado(dNome)}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left text-xs transition cursor-pointer ${
+                    isSel
+                      ? 'border-primary bg-primary/10 text-primary font-bold'
+                      : 'border-border/60 hover:border-border hover:bg-muted/50 text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <UserAvatar name={dNome} src={des.avatar_url} size="xs" />
+                    <span>{dNome}</span>
+                  </div>
+                  {isSel && <Check size={14} className="text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalLoteDesignerOpen(false)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleAplicarDesignerEmLote(designerLoteSelecionado)}
+              className="text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Aplicar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

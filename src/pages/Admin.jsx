@@ -105,6 +105,7 @@ export default function Admin() {
   // Form de novo usuário
   const [novoNome, setNovoNome] = useState('');
   const [novoEmail, setNovoEmail] = useState('');
+  const [novoRevenda, setNovoRevenda] = useState('');
   const [novoIsAdmin, setNovoIsAdmin] = useState(false);
   const [novoRoles, setNovoRoles] = useState([PERFIS.DESIGNER]);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
@@ -113,6 +114,7 @@ export default function Admin() {
   // Form de edição de usuário
   const [editNome, setEditNome] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editRevenda, setEditRevenda] = useState('');
   const [editIsAdmin, setEditIsAdmin] = useState(false);
   const [editRoles, setEditRoles] = useState([PERFIS.DESIGNER]);
   const [editStatus, setEditStatus] = useState('ativo');
@@ -189,6 +191,7 @@ export default function Admin() {
   function abrirNovoUsuario() {
     setNovoNome('');
     setNovoEmail('');
+    setNovoRevenda('');
     setNovoIsAdmin(false);
     setNovoRoles([PERFIS.DESIGNER]);
     setErroNovo('');
@@ -210,6 +213,7 @@ export default function Admin() {
         email: novoEmail,
         role: novoRoles[0],
         roles: novoRoles,
+        revenda: novoRevenda,
         is_admin: novoIsAdmin,
       });
       if (!res.success) {
@@ -228,6 +232,7 @@ export default function Admin() {
     setUsuarioEditando(u);
     setEditNome(u.nome || '');
     setEditEmail(u.email || '');
+    setEditRevenda(u.revenda || '');
     setEditIsAdmin(Boolean(u.is_admin || u.role === PERFIS.ADMIN));
 
     const userRoles = Array.isArray(u.roles) && u.roles.length > 0
@@ -281,6 +286,7 @@ export default function Admin() {
         nome: editNome.trim(),
         role: editRoles[0],
         roles: editRoles,
+        revenda: editRevenda,
         is_admin: editIsAdmin,
         status: editStatus,
         permissoes_extras: permissoesExtras,
@@ -511,6 +517,7 @@ export default function Admin() {
                   <tr>
                     <th className="py-3 px-4">Usuário</th>
                     <th className="py-3 px-4">Perfil</th>
+                    <th className="py-3 px-4">Empresa / Revenda</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Último acesso</th>
                     <th className="py-3 px-4">Criado em</th>
@@ -520,7 +527,7 @@ export default function Admin() {
                 <tbody className="divide-y divide-border/60">
                   {usuariosFiltrados.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                      <td colSpan={7} className="py-10 text-center text-muted-foreground">
                         Nenhum usuário encontrado.
                       </td>
                     </tr>
@@ -563,6 +570,16 @@ export default function Admin() {
                                 </span>
                               )}
                             </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {u.revenda ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium bg-secondary/80 text-foreground border border-border">
+                                <Building2 size={12} className="text-muted-foreground" />
+                                {u.revenda}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/50 text-xs italic">—</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             {isAtivo ? (
@@ -881,6 +898,37 @@ export default function Admin() {
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="novo-revenda" className="text-xs font-semibold flex items-center gap-1.5">
+                <Building2 size={13} /> Empresa / Revenda à qual pertence
+              </Label>
+              <Select
+                value={novoRevenda || '__none__'}
+                onValueChange={(v) => setNovoRevenda(v === '__none__' ? '' : v)}
+              >
+                <SelectTrigger id="novo-revenda" className="h-10 text-xs sm:text-sm">
+                  <SelectValue placeholder="Selecione a empresa / revenda (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nenhuma (Interno / Sem revenda)</SelectItem>
+                  {revendas.map((r) => {
+                    const nomeRev = typeof r === 'object' ? r.nome : r;
+                    return (
+                      <SelectItem key={r.id || nomeRev} value={nomeRev}>
+                        <div className="flex items-center gap-2">
+                          <Building2 size={13} className="text-muted-foreground" />
+                          <span>{nomeRev}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Ex.: vincule um vendedor à sua respectiva revenda (ex.: Papelée, iPapel).
+              </p>
+            </div>
+
             {/* Acesso Administrador (Superusuário) */}
             <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-1">
               <label className="flex items-start gap-2.5 cursor-pointer select-none">
@@ -1016,6 +1064,34 @@ export default function Admin() {
                   <SelectContent>
                     <SelectItem value="ativo">Ativo (Acesso Liberado)</SelectItem>
                     <SelectItem value="inativo">Inativo (Desativado)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <Building2 size={13} /> Empresa / Revenda
+                </Label>
+                <Select
+                  value={editRevenda || '__none__'}
+                  onValueChange={(v) => setEditRevenda(v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Selecione a empresa / revenda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nenhuma (Interno / Sem revenda)</SelectItem>
+                    {revendas.map((r) => {
+                      const nomeRev = typeof r === 'object' ? r.nome : r;
+                      return (
+                        <SelectItem key={r.id || nomeRev} value={nomeRev}>
+                          <div className="flex items-center gap-2">
+                            <Building2 size={13} className="text-muted-foreground" />
+                            <span>{nomeRev}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

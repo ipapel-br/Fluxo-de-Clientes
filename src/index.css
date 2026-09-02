@@ -144,3 +144,50 @@
     stroke-dashoffset: -2000;
   }
 }
+
+/* Customização da barra de rolagem do Kanban */
+.kanban-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+.kanban-scroll-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.kanban-scroll-container::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 9999px;
+}
+
+.kanban-scroll-container::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 9999px;
+}
+
+.kanban-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.6);
+}
+
+/* Customização da barra de rolagem discreta e fina do Drawer */
+.drawer-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
+}
+
+.drawer-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.drawer-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.drawer-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 9999px;
+}
+
+.drawer-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}

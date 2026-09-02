@@ -9,6 +9,7 @@ import {
   Copy,
   History,
   Plus,
+  ArrowUpToLine,
 } from 'lucide-react';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -21,9 +22,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
 import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
+import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 import { getStatusColor, getStatusBadgeStyle } from '@/lib/statusColors';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -43,8 +46,11 @@ export default function DemandaItem({
   onRegistrarAlteracao,
   onDuplicar,
   onVerHistorico,
+  onDefinirComoPrioridade,
   onSelectRow,
   isSelected = false,
+  isBulkSelected = false,
+  onToggleBulkSelect,
   dragDisabled,
   destaque,
   viewMode = 'lista',
@@ -131,7 +137,6 @@ export default function DemandaItem({
   const vendedorAvatar = vendedorObj?.avatar_url || '';
 
   const numFormatado = String(index + 1).padStart(2, '0');
-  const isPrimeiraLinha = index === 0;
 
   return (
     <Draggable draggableId={demanda.id} index={index} isDragDisabled={dragDisabled || !canReorder}>
@@ -149,11 +154,13 @@ export default function DemandaItem({
             snapshot.isDragging ? 'bg-card shadow-2xl z-50 ring-1 ring-border rounded-lg' : ''
           }`}
         >
-          {/* Destaque discreto na lateral esquerda para a primeira linha ou selecionada */}
-          {(isPrimeiraLinha || isSelected) && (
+          {/* Destaque discreto na lateral esquerda apenas para a prioridade ativa (sem filtros) ou selecionada */}
+          {(destaque || isSelected) && (
             <div
               className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-r-xs ${
-                isSelected ? 'bg-primary shadow-[0_0_8px_rgba(0,0,0,0.15)] dark:shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'bg-[#f97316] shadow-[0_0_8px_rgba(249,115,22,0.3)]'
+                isSelected
+                  ? 'bg-primary shadow-[0_0_8px_rgba(0,0,0,0.15)] dark:shadow-[0_0_8px_rgba(255,255,255,0.3)]'
+                  : 'bg-[#f97316] shadow-[0_0_8px_rgba(249,115,22,0.3)]'
               }`}
             />
           )}
@@ -161,9 +168,23 @@ export default function DemandaItem({
           {/* Grid de Colunas */}
           <div className="w-full grid grid-cols-12 items-center gap-2 sm:gap-4 text-xs">
             
-            {/* Coluna 1: # (Número) */}
-            <div className="col-span-1 sm:col-span-1 flex items-center min-w-0">
-              <span className="font-mono text-[13px] font-bold text-muted-foreground/80 tabular-nums">
+            {/* Coluna 1: # (Número) + Checkbox para Ações em Massa (Suporta tecla Shift para seleção em intervalo) */}
+            <div
+              className="col-span-1 sm:col-span-1 flex items-center gap-1.5 min-w-0"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              <Checkbox
+                checked={isBulkSelected}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleBulkSelect?.(demanda.id, !isBulkSelected, e.shiftKey);
+                }}
+                className="h-3.5 w-3.5 rounded border-muted-foreground/40 data-[state=checked]:bg-primary data-[state=checked]:border-primary cursor-pointer"
+                title="Selecionar demanda (Shift + clique para selecionar intervalo)"
+              />
+              <span className="font-mono text-[12px] font-bold text-muted-foreground/80 tabular-nums select-none">
                 {numFormatado}
               </span>
             </div>
@@ -293,37 +314,8 @@ export default function DemandaItem({
               </Popover>
             </div>
 
-            {/* Coluna 5: ETAPA (Edição Direta via Menu de Fases da Arte) */}
-            <div className="hidden md:flex md:col-span-3 lg:col-span-2 xl:col-span-2 items-center gap-2 min-w-0 pr-2" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild disabled={!canEdit}>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-left hover:opacity-80 transition cursor-pointer disabled:cursor-default max-w-full truncate"
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: corEtapa }} />
-                    <span className="text-xs font-medium text-foreground truncate" title={nomeEtapa}>
-                      {nomeEtapa}
-                    </span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[180px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-xl">
-                  {FASES_ARTE.map((f) => (
-                    <DropdownMenuItem
-                      key={f.valor}
-                      onClick={() => onQuickUpdate?.(demanda, { fase_arte: f.valor })}
-                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center gap-2"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: f.cor }} />
-                      <span>{f.label}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Coluna 6: STATUS (Edição Direta via Menu de Status da Fila com cores destacadas) */}
-            <div className="hidden lg:flex lg:col-span-2 xl:col-span-2 items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
+            {/* Coluna 5: STATUS (Edição Direta via Menu de Status da Fila com cores destacadas) */}
+            <div className="hidden lg:flex lg:col-span-2 items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild disabled={!canEdit}>
                   <button
@@ -377,7 +369,88 @@ export default function DemandaItem({
               </DropdownMenu>
             </div>
 
-            {/* Coluna 7: D / V (Designer e Vendedor com Avatares e Tooltips) */}
+            {/* Coluna 6: ETAPA (Edição Direta via Menu de Fases da Arte) */}
+            <div className="hidden md:flex md:col-span-2 lg:col-span-1 items-center gap-1.5 min-w-0 pr-1" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild disabled={!canEdit}>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-left hover:opacity-80 transition cursor-pointer disabled:cursor-default max-w-full truncate"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: corEtapa }} />
+                    <span className="text-xs font-medium text-foreground truncate" title={nomeEtapa}>
+                      {faseArteCfg?.curto || nomeEtapa}
+                    </span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[180px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-xl">
+                  {FASES_ARTE.map((f) => (
+                    <DropdownMenuItem
+                      key={f.valor}
+                      onClick={() => onQuickUpdate?.(demanda, { fase_arte: f.valor })}
+                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center gap-2"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: f.cor }} />
+                      <span>{f.label}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Coluna 7: COMPLEXIDADE (Edição Direta via Dropdown com badges coloridas) */}
+            <div className="hidden md:flex md:col-span-2 lg:col-span-1 items-center gap-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+              {(() => {
+                const compCfg = complexidadeConfig(demanda.complexidade || 'normal');
+                return (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild disabled={!canEdit}>
+                      <button
+                        type="button"
+                        className="group/comp flex items-center gap-1 text-left transition cursor-pointer disabled:cursor-default max-w-full truncate hover:opacity-80"
+                      >
+                        {compCfg ? (
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-semibold truncate shadow-2xs ${compCfg.bgClass}`}
+                            title={`Complexidade: ${compCfg.label}`}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full mr-1 shrink-0" style={{ backgroundColor: compCfg.cor }} />
+                            {compCfg.label}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/40 text-xs">—</span>
+                        )}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="min-w-[140px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-xl">
+                      <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Complexidade
+                      </div>
+                      {COMPLEXIDADES.map((c) => {
+                        const isSelected = (demanda.complexidade || 'normal').toLowerCase() === c.valor;
+                        return (
+                          <DropdownMenuItem
+                            key={c.valor}
+                            onClick={() => onQuickUpdate?.(demanda, { complexidade: c.valor })}
+                            className={`text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center justify-between rounded-md transition ${
+                              isSelected ? 'bg-accent font-bold' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.cor }} />
+                              <span>{c.label}</span>
+                            </div>
+                            {isSelected && <Check size={12} className="text-primary" />}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              })()}
+            </div>
+
+            {/* Coluna 8: D / V (Designer e Vendedor com Avatares e Tooltips) */}
             <div className="hidden lg:flex lg:col-span-1 items-center justify-start gap-1 min-w-0" onClick={(e) => e.stopPropagation()}>
               {/* Designer Avatar */}
               {demanda.designer ? (
@@ -470,7 +543,16 @@ export default function DemandaItem({
                     <MoreHorizontal size={13} />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[160px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-2xl">
+                <DropdownMenuContent align="end" className="min-w-[170px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-2xl">
+                  {canReorder && (
+                    <DropdownMenuItem
+                      onClick={() => onDefinirComoPrioridade?.(demanda)}
+                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold"
+                    >
+                      <ArrowUpToLine size={13} className="mr-2 text-amber-500" /> Definir como Prioridade
+                    </DropdownMenuItem>
+                  )}
+                  {canReorder && canEdit && <DropdownMenuSeparator className="bg-border" />}
                   {canEdit && (
                     <DropdownMenuItem
                       onClick={() => onEdit?.(demanda)}

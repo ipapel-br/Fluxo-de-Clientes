@@ -267,6 +267,7 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [] })
           const sNome = (s.nome || '').toLowerCase();
           if (faseBitrix.includes('revis') && sNome.includes('revis')) return true;
           if (faseBitrix.includes('amostra') && sNome.includes('amostra')) return true;
+          if ((faseBitrix.includes('aprovad') || faseBitrix.includes('aprova')) && (sNome.includes('aprovad') || sNome.includes('aprova'))) return true;
           if (faseBitrix.includes('impress') && sNome.includes('impress')) return true;
           if (faseBitrix.includes('conclu') && s.concluido) return true;
           if (faseBitrix.includes('andamento') && sNome.includes('andamento')) return true;

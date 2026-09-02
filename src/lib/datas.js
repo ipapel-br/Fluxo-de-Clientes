@@ -49,3 +49,26 @@ export function labelPrazo(dataStr) {
   if (t === 'vencido') return `Vencido · ${formatarPrazo(dataStr)}`;
   return formatarPrazo(dataStr);
 }
+
+export function calcularScorePrazoProximo(dataStr) {
+  if (!dataStr) return 999999999;
+  let d;
+  try {
+    d = parseISO(dataStr);
+  } catch {
+    return 999999999;
+  }
+  if (isNaN(d.getTime())) return 999999999;
+
+  const hoje = semHorario(new Date());
+  const data = semHorario(d);
+  const diffDays = Math.round((data.getTime() - hoje.getTime()) / 86400000);
+
+  if (diffDays >= 0) {
+    // 0 = Hoje, 1 = Amanhã, 2 = Em 2 dias... vêm primeiro do mais próximo ao mais distante
+    return diffDays;
+  } else {
+    // Vencidos: vêm em seguida, do mais recente (ex: ontem) para o mais antigo (ex: meses atrás)
+    return 10000 + Math.abs(diffDays);
+  }
+}

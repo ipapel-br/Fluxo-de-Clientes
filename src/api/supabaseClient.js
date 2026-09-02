@@ -98,6 +98,7 @@ export function normalizeUsuario(item) {
   return {
     ...item,
     role: item.role || 'seller',
+    revenda: item.revenda || '',
     status: item.status || 'ativo',
     permissoes_extras: item.permissoes_extras || {},
   };
