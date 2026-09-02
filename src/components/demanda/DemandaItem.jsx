@@ -221,8 +221,8 @@ export default function DemandaItem({
               </DropdownMenu>
             </div>
 
-            {/* Coluna 3: CLIENTE / DEMANDA */}
-            <div className="col-span-4 sm:col-span-3 min-w-0 pr-2">
+            {/* Coluna 3: CLIENTE */}
+            <div className="col-span-3 sm:col-span-3 min-w-0 pr-2">
               <div
                 onClick={() => canEdit && onEdit?.(demanda)}
                 className="font-bold text-sm text-foreground truncate hover:text-primary cursor-pointer transition leading-tight"

@@ -1570,7 +1570,7 @@ export default function Prioridades() {
             )}
 
             <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
-              {/* 1. Cabeçalho da tabela com colunas e menus de filtro interativos: #, PRIORIDADE, CLIENTE / DEMANDA, PRAZO, ETAPA, STATUS, D / V, AÇÕES */}
+              {/* 1. Cabeçalho da tabela com colunas e menus de filtro interativos: #, PRIORIDADE, CLIENTE, PRAZO, STATUS, DEMANDA, ETAPA, COMPLEXIDADE, D / V, AÇÕES */}
               <div className="w-full grid grid-cols-12 items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 bg-muted/40 border-b border-border text-[11px] font-bold text-muted-foreground/80 uppercase tracking-wider select-none">
                 {/* 1. # (Ordem + Seleção Todos) */}
                 <div className="col-span-1 flex items-center gap-1.5 min-w-0">
@@ -1686,9 +1686,9 @@ export default function Prioridades() {
                   </PopoverContent>
                 </Popover>
 
-                {/* 3. CLIENTE / DEMANDA */}
+                {/* 3. CLIENTE */}
                 <Popover>
-                  <div className="col-span-4 sm:col-span-3 flex items-center justify-between gap-1 group">
+                  <div className="col-span-3 sm:col-span-3 flex items-center justify-between gap-1 group">
                     <PopoverTrigger asChild>
                       <button
                         type="button"
@@ -1697,7 +1697,7 @@ export default function Prioridades() {
                         }`}
                         title="Filtrar por Cliente ou Revenda"
                       >
-                        <span>CLIENTE / DEMANDA</span>
+                        <span>CLIENTE</span>
                         {filtros.busca || filtros.revenda ? (
                           <span className="flex h-4 px-1 items-center justify-center rounded text-[9px] bg-primary text-primary-foreground font-extrabold">
                             {Boolean(filtros.busca) + Boolean(filtros.revenda)}
