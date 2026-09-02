@@ -24,7 +24,8 @@ export const PERMISSOES_DEFINICAO = [
     modulo: 'PRIORIDADE',
     permissoes: [
       { key: 'priority_view', label: 'Visualizar fila de prioridade', descricao: 'Acesso à aba de prioridades e lista de demandas' },
-      { key: 'priority_create', label: 'Criar nova demanda', descricao: 'Pode cadastrar novas demandas no sistema' },
+      { key: 'priority_create', label: 'Criar nova demanda', descricao: 'Pode cadastrar novas demandas no sistema (botão "+ Nova demanda")' },
+      { key: 'priority_import_csv', label: 'Importar demandas via CSV', descricao: 'Pode visualizar o botão e importar lotes de demandas por arquivo CSV' },
       { key: 'priority_edit', label: 'Editar demandas', descricao: 'Pode alterar informações das demandas na prioridade' },
       { key: 'priority_reorder', label: 'Reordenar prioridade (Drag & Drop)', descricao: 'Pode alterar a ordem manual de prioridade' },
     ],
@@ -67,6 +68,7 @@ export const PERMISSOES_PADRAO_POR_PERFIL = {
   [PERFIS.ADMIN]: [
     'priority_view',
     'priority_create',
+    'priority_import_csv',
     'priority_edit',
     'priority_reorder',
     'factory_view',

@@ -1365,22 +1365,26 @@ export default function Prioridades() {
             viewMode={viewMode}
             onViewModeChange={handleSetViewMode}
             acoesExtras={
-              can('priority_create') && (
+              (can('priority_import_csv') || can('priority_create')) && (
                 <>
-                  <Button
-                    variant="outline"
-                    onClick={() => setCsvImportOpen(true)}
-                    className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground font-medium text-xs sm:text-sm h-10 px-3.5 rounded-lg transition"
-                  >
-                    <FileSpreadsheet size={15} className="mr-1.5 shrink-0 opacity-80" /> Importar CSV
-                  </Button>
+                  {can('priority_import_csv') && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setCsvImportOpen(true)}
+                      className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground font-medium text-xs sm:text-sm h-10 px-3.5 rounded-lg transition cursor-pointer"
+                    >
+                      <FileSpreadsheet size={15} className="mr-1.5 shrink-0 opacity-80" /> Importar CSV
+                    </Button>
+                  )}
 
-                  <Button
-                    onClick={abrirNovo}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-xs sm:text-sm h-10 px-3.5 rounded-lg shadow-sm transition"
-                  >
-                    <Plus size={16} className="mr-1 shrink-0 stroke-[2.5]" /> Nova demanda
-                  </Button>
+                  {can('priority_create') && (
+                    <Button
+                      onClick={abrirNovo}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-xs sm:text-sm h-10 px-3.5 rounded-lg shadow-sm transition cursor-pointer"
+                    >
+                      <Plus size={16} className="mr-1 shrink-0 stroke-[2.5]" /> Nova demanda
+                    </Button>
+                  )}
                 </>
               )
             }
