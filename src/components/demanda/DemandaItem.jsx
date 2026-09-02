@@ -316,7 +316,7 @@ export default function DemandaItem({
             </div>
 
             {/* Coluna 5: STATUS (Edição Direta via Menu de Status da Fila com cores destacadas) */}
-            <div className="hidden lg:flex lg:col-span-2 items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
+            <div className="hidden lg:flex lg:col-span-1 items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild disabled={!canEdit}>
                   <button

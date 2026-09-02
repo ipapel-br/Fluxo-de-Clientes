@@ -1894,7 +1894,7 @@ export default function Prioridades() {
 
                 {/* 5. STATUS */}
                 <Popover>
-                  <div className="hidden lg:flex lg:col-span-2 items-center justify-between gap-1 group">
+                  <div className="hidden lg:flex lg:col-span-1 items-center justify-between gap-1 group">
                     <PopoverTrigger asChild>
                       <button
                         type="button"
