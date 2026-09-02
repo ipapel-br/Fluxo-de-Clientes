@@ -41,6 +41,22 @@ export const TIPOS_DEMANDA = [
     bgClass: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
     descricao: 'Composição de arte utilizando elementos de bancos de imagens (Shutterstock, Freepik, etc)',
   },
+  {
+    valor: 'mockup',
+    curto: 'MOCKUP',
+    nomeCompleto: 'MOCKUP',
+    cor: '#06b6d4', // Cyan
+    bgClass: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/30',
+    descricao: 'Simulação realista / aplicação da arte no ambiente do cliente',
+  },
+  {
+    valor: 'amostra',
+    curto: 'AMOSTRA',
+    nomeCompleto: 'AMOSTRA',
+    cor: '#ec4899', // Pink
+    bgClass: 'bg-pink-500/10 text-pink-500 border-pink-500/30',
+    descricao: 'Preparação e envio de amostra física ou prova de impressão',
+  },
 ];
 
 /**
@@ -66,17 +82,23 @@ export function tipoDemandaConfig(valor) {
   if (porNome) return porNome;
 
   // Detecção inteligente em textos livres (ex: vindos do Bitrix)
+  if (v.includes('mockup') || v.includes('simulac') || v.includes('render')) {
+    return TIPOS_DEMANDA.find((t) => t.valor === 'mockup');
+  }
+  if (v.includes('amostra') || v.includes('prova')) {
+    return TIPOS_DEMANDA.find((t) => t.valor === 'amostra');
+  }
   if (v.includes('cor') || v.includes('color') || v.includes('paleta')) {
-    return TIPOS_DEMANDA[0]; // alteracao_cor
+    return TIPOS_DEMANDA.find((t) => t.valor === 'alteracao_cor');
   }
   if (v.includes('redimension') || v.includes('medida') || v.includes('escala') || v.includes('tamanho')) {
-    return TIPOS_DEMANDA[1]; // redimensionar
+    return TIPOS_DEMANDA.find((t) => t.valor === 'redimensionar');
   }
   if (v.includes('zero') || v.includes('autoral') || v.includes('ilustra')) {
-    return TIPOS_DEMANDA[2]; // personalizacao_zero
+    return TIPOS_DEMANDA.find((t) => t.valor === 'personalizacao_zero');
   }
   if (v.includes('shutter') || v.includes('banco') || v.includes('freepik') || v.includes('stock')) {
-    return TIPOS_DEMANDA[3]; // shutter_banco
+    return TIPOS_DEMANDA.find((t) => t.valor === 'shutter_banco');
   }
 
   return null;
