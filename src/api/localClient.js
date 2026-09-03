@@ -20,13 +20,15 @@ const createId = (prefix) => {
 const defaultStatuses = () => {
   const timestamp = now();
   return [
-    { id: 'status_parado', nome: 'Parado', cor: '#ef4444', concluido: false, ordem: 0, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_criacao', nome: 'Criação', cor: '#f59e0b', concluido: false, ordem: 1, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_revisao', nome: 'Revisão', cor: '#f97316', concluido: false, ordem: 2, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_amostra', nome: 'Amostra', cor: '#06b6d4', concluido: false, ordem: 3, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_aprovado', nome: 'Aprovado', cor: '#0284c7', concluido: false, ordem: 4, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_impressao', nome: 'Impressão', cor: '#8b5cf6', concluido: false, ordem: 5, created_date: timestamp, updated_date: timestamp },
-    { id: 'status_concluido', nome: 'Concluído', cor: '#22c55e', concluido: true, ordem: 6, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_sem_briefing', nome: 'Sem Briefing', cor: '#64748b', concluido: false, ordem: 0, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_parado', nome: 'Parado', cor: '#ef4444', concluido: false, ordem: 1, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_criacao', nome: 'Criação', cor: '#f59e0b', concluido: false, ordem: 2, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_revisao', nome: 'Revisão', cor: '#f97316', concluido: false, ordem: 3, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_amostra', nome: 'Amostra', cor: '#06b6d4', concluido: false, ordem: 4, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_aprovado', nome: 'Aprovado', cor: '#0284c7', concluido: false, ordem: 5, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_com_arquivo', nome: 'C/ Arquivo', descricao: 'Colocar arquivo impressão', cor: '#0d9488', concluido: false, ordem: 6, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_impressao', nome: 'Impressão', cor: '#8b5cf6', concluido: false, ordem: 7, created_date: timestamp, updated_date: timestamp },
+    { id: 'status_concluido', nome: 'Concluído', cor: '#22c55e', concluido: true, ordem: 8, created_date: timestamp, updated_date: timestamp },
   ];
 };
 

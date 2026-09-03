@@ -22,8 +22,8 @@ import {
   Clock,
   Sparkles,
   SlidersHorizontal,
-  User as UserIcon,
-  CheckSquare,
+  CheckCircle2,
+  PauseCircle,
 } from 'lucide-react';
 import { localClient } from '@/api/localClient';
 import { Button } from '@/components/ui/button';
@@ -68,7 +68,14 @@ import {
   entradaAlteracaoPrazo,
 } from '@/lib/historico';
 import { emitirNotificacao, NOTIFICATION_TYPES } from '@/lib/notificationService';
-import { tipoAlertaPrazo, calcularScorePrazoProximo } from '@/lib/datas';
+import {
+  tipoAlertaPrazo,
+  calcularScorePrazoProximo,
+  isStatusAmostra,
+  isStatusCriacao,
+  isStatusPausa,
+  calcularPrazoFuturo,
+} from '@/lib/datas';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
 
@@ -277,7 +284,7 @@ export default function Prioridades() {
       }
 
       // Alerta de prazo
-      const alerta = tipoAlertaPrazo(d.prazo);
+      const alerta = tipoAlertaPrazo(d.prazo, d, statusMap);
       if (alerta === 'hoje') hoje++;
       if (alerta === 'vencido') atrasadas++;
 
@@ -355,9 +362,9 @@ export default function Prioridades() {
           d.seller_id === usuario?.id
       );
     } else if (filtros.aba === 'hoje') {
-      result = result.filter((d) => tipoAlertaPrazo(d.prazo) === 'hoje');
+      result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'hoje');
     } else if (filtros.aba === 'atrasadas') {
-      result = result.filter((d) => tipoAlertaPrazo(d.prazo) === 'vencido');
+      result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'vencido');
     } else if (filtros.aba === 'alta_prioridade') {
       result = result.filter((d) => {
         const et = (d.etiqueta || '').toLowerCase();
@@ -438,12 +445,16 @@ export default function Prioridades() {
     }
     if (filtros.prazo && filtros.prazo !== '__all__') {
       if (filtros.prazo === 'hoje') {
-        result = result.filter((d) => tipoAlertaPrazo(d.prazo) === 'hoje');
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'hoje');
       } else if (filtros.prazo === 'atrasadas' || filtros.prazo === 'vencido') {
-        result = result.filter((d) => tipoAlertaPrazo(d.prazo) === 'vencido');
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'vencido');
+      } else if (filtros.prazo === 'entregue') {
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'entregue');
+      } else if (filtros.prazo === 'congelado') {
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'congelado');
       } else if (filtros.prazo === 'esta_semana') {
         result = result.filter((d) => {
-          const t = tipoAlertaPrazo(d.prazo);
+          const t = tipoAlertaPrazo(d.prazo, d, statusMap);
           return t === 'hoje' || t === 'proximo';
         });
       } else if (filtros.prazo === 'com_data') {
@@ -470,16 +481,16 @@ export default function Prioridades() {
         });
       } else if (sortConfig.key === 'prazo') {
         result = [...result].sort((a, b) => {
-          const scoreA = calcularScorePrazoProximo(a.prazo);
-          const scoreB = calcularScorePrazoProximo(b.prazo);
+          const scoreA = calcularScorePrazoProximo(a.prazo, a, statusMap);
+          const scoreB = calcularScorePrazoProximo(b.prazo, b, statusMap);
           const diff = scoreA - scoreB;
           return sortConfig.direction === 'asc' ? diff : -diff;
         });
       } else if (sortConfig.key === 'etapa') {
-        const etapaIdx = { iniciando: 1, no_meio: 2, finalizando: 3 };
+        const etapaIdx = { parado: 0, iniciando: 1, no_meio: 2, finalizando: 3 };
         result = [...result].sort((a, b) => {
-          const eA = etapaIdx[a.fase_arte] || 0;
-          const eB = etapaIdx[b.fase_arte] || 0;
+          const eA = etapaIdx[a.fase_arte] ?? 0;
+          const eB = etapaIdx[b.fase_arte] ?? 0;
           const diff = eA - eB;
           return sortConfig.direction === 'asc' ? diff : -diff;
         });
@@ -524,8 +535,8 @@ export default function Prioridades() {
         });
       } else if (ordenacao === 'prazo') {
         result = [...result].sort((a, b) => {
-          const scoreA = calcularScorePrazoProximo(a.prazo);
-          const scoreB = calcularScorePrazoProximo(b.prazo);
+          const scoreA = calcularScorePrazoProximo(a.prazo, a, statusMap);
+          const scoreB = calcularScorePrazoProximo(b.prazo, b, statusMap);
           return scoreA - scoreB;
         });
       } else if (ordenacao === 'cliente') {
@@ -645,10 +656,11 @@ export default function Prioridades() {
   }, [ativas]);
 
   const etapaDemandCounts = useMemo(() => {
-    const map = { iniciando: 0, no_meio: 0, finalizando: 0 };
+    const map = { parado: 0, iniciando: 0, no_meio: 0, finalizando: 0 };
     ativas.forEach((d) => {
-      const k = (d.fase_arte || '').toLowerCase();
+      const k = (d.fase_arte || 'parado').toLowerCase();
       if (map[k] !== undefined) map[k]++;
+      else map.parado++;
     });
     return map;
   }, [ativas]);
@@ -665,17 +677,19 @@ export default function Prioridades() {
   }, [ativas]);
 
   const prazoDemandCounts = useMemo(() => {
-    const map = { hoje: 0, atrasadas: 0, esta_semana: 0, com_data: 0, sem_data: 0 };
+    const map = { hoje: 0, atrasadas: 0, entregue: 0, congelado: 0, esta_semana: 0, com_data: 0, sem_data: 0 };
     ativas.forEach((d) => {
-      const t = tipoAlertaPrazo(d.prazo);
+      const t = tipoAlertaPrazo(d.prazo, d, statusMap);
       if (t === 'hoje') map.hoje++;
       if (t === 'vencido') map.atrasadas++;
+      if (t === 'entregue') map.entregue++;
+      if (t === 'congelado') map.congelado++;
       if (t === 'hoje' || t === 'proximo') map.esta_semana++;
       if (d.prazo || d.data_especifica) map.com_data++;
       else map.sem_data++;
     });
     return map;
-  }, [ativas]);
+  }, [ativas, statusMap]);
 
   // Demanda selecionada para o Drawer lateral
   const demandaSelecionadaObj = useMemo(() => {
@@ -822,6 +836,7 @@ export default function Prioridades() {
 
     const nova = await localClient.entities.Demanda.create({
       ...data,
+      fase_arte: data.fase_arte || 'parado',
       historico,
       ordem: maxOrdem + 1,
       design_position: maxOrdem + 1,
@@ -946,12 +961,19 @@ export default function Prioridades() {
   }
 
   async function registrarAlteracao(demanda, novoTexto, opcoes = {}) {
-    const { novoPrazo, diasAjustados } = opcoes;
+    const { novoPrazo, diasAjustados, novoStatusId } = opcoes;
     const entradas = [];
     const agora = new Date().toISOString();
 
     // Entrada da nova alteração/pedido
     entradas.push(entradaSituacao(novoTexto, usuario, agora));
+
+    // Se houve mudança de status
+    if (novoStatusId && novoStatusId !== demanda.status_id) {
+      entradas.push(
+        entradaStatus(statusMap[demanda.status_id]?.nome, statusMap[novoStatusId]?.nome, usuario, agora)
+      );
+    }
 
     // Se houve ajuste de prazo na alteração
     if (novoPrazo && novoPrazo !== demanda.prazo) {
@@ -971,6 +993,7 @@ export default function Prioridades() {
     const updatePayload = {
       demanda: novoTexto,
       historico,
+      ...(novoStatusId ? { status_id: novoStatusId } : {}),
       ...(novoPrazo ? { prazo: novoPrazo } : {}),
     };
 
@@ -1002,6 +1025,20 @@ export default function Prioridades() {
           patch.fase_arte = 'Arte aprovada';
         }
       }
+
+      // Se voltar ou mudar para Amostra: coloca prazo de 1 dia automaticamente!
+      if (isStatusAmostra(patch.status_id, statusMap)) {
+        if (!patch.prazo) {
+          patch.prazo = calcularPrazoFuturo(1);
+        }
+      }
+
+      // Se voltar ou mudar para Criação: recalcula o prazo automaticamente (Data de Retorno + 1 dia)!
+      if (isStatusCriacao(patch.status_id, statusMap)) {
+        if (!patch.prazo) {
+          patch.prazo = calcularPrazoFuturo(1);
+        }
+      }
     }
 
     const entradas = gerarEntradasEdicao(demanda, { ...demanda, ...patch }, statusMap, usuario);
@@ -1015,7 +1052,7 @@ export default function Prioridades() {
 
       // Notificar sobre mudanças pontuais relevantes
       if (patch.fase_arte && patch.fase_arte !== demanda.fase_arte) {
-        const faseNomes = { iniciando: 'Iniciando arte', no_meio: 'No meio da arte', finalizando: 'Finalizando arte' };
+        const faseNomes = { parado: 'Arte parada', iniciando: 'Iniciando arte', no_meio: 'No meio da arte', finalizando: 'Finalizando arte' };
         emitirNotificacao({
           demanda: { ...demanda, ...patch },
           autor: usuario,
@@ -1071,6 +1108,7 @@ export default function Prioridades() {
     const novaDemanda = {
       ...demanda,
       cliente: `${demanda.cliente} (Cópia)`,
+      fase_arte: 'parado',
       ordem: maxOrdem + 1,
       design_position: maxOrdem + 1,
       factory_position: maxFactoryOrdem + 1,
@@ -1111,6 +1149,7 @@ export default function Prioridades() {
         cliente: item.cliente,
         demanda: item.demanda || '',
         tipo_demanda: item.tipo_demanda || '',
+        fase_arte: item.fase_arte || 'parado',
         prazo: item.prazo || '',
         designer: item.designer || '',
         designer_id: item.designer_id || null,
@@ -1856,6 +1895,30 @@ export default function Prioridades() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prazo: 'entregue' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prazo === 'entregue' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 size={12} className="text-emerald-500" /> Entregues (Revisão)
+                        </span>
+                        <span className="text-[10px] opacity-70">({prazoDemandCounts.entregue || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, prazo: 'congelado' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.prazo === 'congelado' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <PauseCircle size={12} className="text-amber-500" /> Pausados / Congelados
+                        </span>
+                        <span className="text-[10px] opacity-70">({prazoDemandCounts.congelado || 0})</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setFiltros((prev) => ({ ...prev, prazo: 'hoje' }))}
                         className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
                           filtros.prazo === 'hoje' ? 'bg-amber-500/15 text-amber-600 font-bold' : 'hover:bg-muted/60 text-foreground'
@@ -1956,6 +2019,7 @@ export default function Prioridades() {
                           <button
                             key={st.id}
                             type="button"
+                            title={st.descricao || (st.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : st.nome)}
                             onClick={() => setFiltros((prev) => ({ ...prev, status: isSel ? '' : st.id }))}
                             className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
                               isSel ? 'bg-primary/10 text-foreground font-bold border border-primary/20' : 'hover:bg-muted/60 text-foreground'
@@ -2118,6 +2182,16 @@ export default function Prioridades() {
                       >
                         <span>Todas as etapas</span>
                         <span className="text-[10px] opacity-70">({ativas.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'parado' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'parado' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>⏸️ Arte parada</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.parado || 0})</span>
                       </button>
                       <button
                         type="button"
@@ -2735,11 +2809,12 @@ export default function Prioridades() {
           <div className="space-y-1.5 py-2 max-h-60 overflow-y-auto">
             {statuses.map((st) => {
               const isSel = statusLoteSelecionado === st.id;
-              const { cor } = getStatusColor(st.nome);
+              const cor = getStatusColor(st);
               return (
                 <button
                   key={st.id}
                   type="button"
+                  title={st.descricao || (st.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : st.nome)}
                   onClick={() => setStatusLoteSelecionado(st.id)}
                   className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left text-xs transition cursor-pointer ${
                     isSel

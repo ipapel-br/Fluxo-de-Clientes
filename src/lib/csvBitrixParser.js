@@ -347,6 +347,8 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [], u
           if (faseBitrix.includes('conclu') && s.concluido) return true;
           if (faseBitrix.includes('andamento') && sNome.includes('andamento')) return true;
           if (faseBitrix.includes('parado') && sNome.includes('parado')) return true;
+          if (faseBitrix.includes('briefing') && sNome.includes('briefing')) return true;
+          if (faseBitrix.includes('arquivo') && sNome.includes('arquivo')) return true;
           return sNome === faseBitrix;
         });
         if (statusMatch) status_id = statusMatch.id;
@@ -379,6 +381,7 @@ export function mapearRegistrosBitrix(records, { statuses = [], revendas = [], u
         cliente,
         demanda: demandaEtapa,
         tipo_demanda,
+        fase_arte: 'parado',
         prazo,
         designer,
         designer_id,

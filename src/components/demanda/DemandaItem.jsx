@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import {
   Check,
+  CheckCircle2,
+  PauseCircle,
   Printer,
   MoreHorizontal,
   Pencil,
@@ -24,7 +26,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
 import UserAvatar from '@/components/ui/UserAvatar';
-import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
+import {
+  tipoAlertaPrazo,
+  formatarPrazo,
+  isStatusAmostra,
+  isStatusCriacao,
+  isStatusPausa,
+  calcularPrazoFuturo,
+} from '@/lib/datas';
 import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
@@ -83,11 +92,25 @@ export default function DemandaItem({
 
   // Identificação de prioridade e prazo
   const prioridadeValor = (demanda.etiqueta || '').toLowerCase();
-  const alerta = tipoAlertaPrazo(demanda.prazo);
+  const alerta = tipoAlertaPrazo(demanda.prazo, status || demanda);
   const faseArteCfg = faseArteConfig(demanda.fase_arte);
 
   // Formatação do Prazo e Status
   const prazoTexto = (() => {
+    if (alerta === 'entregue') {
+      return {
+        data: demanda.prazo ? formatarPrazo(demanda.prazo) : 'Entregue',
+        status: 'Entregue',
+        isEntregue: true,
+      };
+    }
+    if (alerta === 'congelado') {
+      return {
+        data: demanda.prazo ? formatarPrazo(demanda.prazo) : 'Pausado',
+        status: 'Pausado',
+        isCongelado: true,
+      };
+    }
     if (!demanda.prazo) return null;
     if (alerta === 'hoje') return { data: 'Hoje', status: null, isHoje: true };
     if (alerta === 'vencido') return { data: formatarPrazo(demanda.prazo) || demanda.prazo, status: 'Vencido', isVencido: true };
@@ -282,7 +305,11 @@ export default function DemandaItem({
                       <>
                         <span
                           className={`font-semibold text-xs ${
-                            prazoTexto.isHoje
+                            prazoTexto.isEntregue
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : prazoTexto.isCongelado
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : prazoTexto.isHoje
                               ? 'text-amber-600 dark:text-amber-400'
                               : prazoTexto.isVencido
                               ? 'text-foreground'
@@ -292,7 +319,17 @@ export default function DemandaItem({
                           {prazoTexto.data}
                         </span>
                         {prazoTexto.status && (
-                          <span className="text-[10px] font-medium text-rose-600 dark:text-rose-400">
+                          <span
+                            className={`text-[10px] font-medium flex items-center gap-0.5 ${
+                              prazoTexto.isEntregue
+                                ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                                : prazoTexto.isCongelado
+                                ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                                : 'text-rose-600 dark:text-rose-400'
+                            }`}
+                          >
+                            {prazoTexto.isEntregue && <CheckCircle2 size={10} className="shrink-0" />}
+                            {prazoTexto.isCongelado && <PauseCircle size={10} className="shrink-0" />}
                             {prazoTexto.status}
                           </span>
                         )}
@@ -327,7 +364,7 @@ export default function DemandaItem({
                       <span
                         style={getStatusBadgeStyle(status)}
                         className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shadow-xs hover:brightness-110 transition-all max-w-full truncate"
-                        title={status.nome}
+                        title={status.descricao || (status.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : status.nome)}
                       >
                         <span
                           className="h-1.5 w-1.5 rounded-full shrink-0 animate-pulse"
@@ -350,7 +387,14 @@ export default function DemandaItem({
                     return (
                       <DropdownMenuItem
                         key={st.id}
-                        onClick={() => onQuickUpdate?.(demanda, { status_id: st.id })}
+                        title={st.descricao || (st.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : status.nome)}
+                        onClick={() => {
+                          const patch = { status_id: st.id };
+                          if (isStatusAmostra(st) || isStatusCriacao(st)) {
+                            patch.prazo = calcularPrazoFuturo(1);
+                          }
+                          onQuickUpdate?.(demanda, patch);
+                        }}
                         className={`text-xs py-2 px-2.5 cursor-pointer hover:bg-accent flex items-center justify-between rounded-lg transition-colors my-0.5 ${
                           isSelected ? 'bg-accent/80 font-semibold' : ''
                         }`}

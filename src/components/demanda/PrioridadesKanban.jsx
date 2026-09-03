@@ -3,9 +3,10 @@ import { Droppable, Draggable } from '@hello-pangea/dnd';
 import {
   Calendar,
   AlertTriangle,
-  Clock,
   Printer,
   Check,
+  CheckCircle2,
+  PauseCircle,
   MoreHorizontal,
   ArrowUpToLine,
   Pencil,
@@ -15,7 +16,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import UserAvatar from '@/components/ui/UserAvatar';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,8 +25,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { getStatusColor, hexToRgba } from '@/lib/statusColors';
 import { complexidadeConfig } from '@/lib/complexidade';
-import { faseArteConfig } from '@/lib/progressoArte';
+import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
 import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
+import { tipoDemandaConfig, TIPOS_DEMANDA } from '@/lib/tiposDemanda';
 import { etiquetaConfig } from '@/lib/etiquetas';
 
 export default function PrioridadesKanban({
@@ -151,7 +152,10 @@ export default function PrioridadesKanban({
                     className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
                     style={{ backgroundColor: corColuna }}
                   />
-                  <h3 className="font-bold text-xs text-foreground uppercase tracking-wider truncate" title={col.nome}>
+                  <h3
+                    className="font-bold text-xs text-foreground uppercase tracking-wider truncate cursor-default"
+                    title={col.descricao || (col.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : col.nome)}
+                  >
                     {col.nome}
                   </h3>
                 </div>
@@ -187,8 +191,9 @@ export default function PrioridadesKanban({
                       const isSelected = demandaSelecionadaId === demanda.id;
                       const compCfg = complexidadeConfig(demanda.complexidade || 'normal');
                       const faseCfg = faseArteConfig(demanda.fase_arte);
-                      const alerta = tipoAlertaPrazo(demanda.prazo);
+                      const alerta = tipoAlertaPrazo(demanda.prazo, demanda, statusMap);
                       const etiqueta = etiquetaConfig(demanda.etiqueta);
+                      const tipoCfg = tipoDemandaConfig(demanda.tipo_demanda || demanda.demanda);
                       const isPrimeiraGeral = demanda.ordem === 0 && !filtrando;
 
                       const designerObj = designers.find((d) => (d.nome || d.value || d.label) === demanda.designer);
@@ -340,20 +345,51 @@ export default function PrioridadesKanban({
                                 </p>
                               )}
 
-                              {/* Linha 4: Badges de Etapa e Complexidade */}
+                              {/* Linha 4: Badges de Etapa, Complexidade e Tipo de Demanda */}
                               <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
                                 {faseCfg && (
-                                  <span
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border"
-                                    style={{
-                                      backgroundColor: hexToRgba(faseCfg.cor, 0.1),
-                                      borderColor: hexToRgba(faseCfg.cor, 0.25),
-                                      color: faseCfg.cor,
-                                    }}
-                                  >
-                                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: faseCfg.cor }} />
-                                    {faseCfg.curto || faseCfg.label}
-                                  </span>
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild disabled={!canEdit}>
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border shadow-2xs transition hover:opacity-80 cursor-pointer disabled:cursor-default"
+                                          style={{
+                                            backgroundColor: hexToRgba(faseCfg.cor, 0.1),
+                                            borderColor: hexToRgba(faseCfg.cor, 0.25),
+                                            color: faseCfg.cor,
+                                          }}
+                                          title={`Etapa da arte: ${faseCfg.label} (Clique para alterar)`}
+                                        >
+                                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: faseCfg.cor }} />
+                                          <span>{faseCfg.curto || faseCfg.label}</span>
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="start" className="min-w-[170px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
+                                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                          Etapa da Arte
+                                        </div>
+                                        {FASES_ARTE.map((f) => {
+                                          const isSel = faseCfg?.valor === f.valor;
+                                          return (
+                                            <DropdownMenuItem
+                                              key={f.valor}
+                                              onClick={() => onQuickUpdate?.(demanda, { fase_arte: f.valor })}
+                                              className={`text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center justify-between rounded-lg transition-colors my-0.5 ${
+                                                isSel ? 'bg-accent/80 font-bold' : ''
+                                              }`}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: f.cor }} />
+                                                <span className="text-xs">{f.label}</span>
+                                              </div>
+                                              {isSel && <Check size={12} className="text-primary shrink-0" />}
+                                            </DropdownMenuItem>
+                                          );
+                                        })}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
                                 )}
 
                                 {compCfg && (
@@ -364,6 +400,89 @@ export default function PrioridadesKanban({
                                     {compCfg.label}
                                   </span>
                                 )}
+
+                                {/* Tag Tipo de Demanda (ex: P. DO ZERO, A. COR, etc) */}
+                                {tipoCfg ? (
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild disabled={!canEdit}>
+                                        <button
+                                          type="button"
+                                          className={`inline-flex items-center px-1.5 py-0.5 rounded-md border text-[10px] font-bold tracking-tight shadow-2xs transition hover:opacity-80 cursor-pointer disabled:cursor-default ${tipoCfg.bgClass}`}
+                                          title={tipoCfg ? `${tipoCfg.nomeCompleto} - ${tipoCfg.descricao}` : ''}
+                                        >
+                                          <span
+                                            className="h-1.5 w-1.5 rounded-full mr-1 shrink-0"
+                                            style={{ backgroundColor: tipoCfg.cor }}
+                                          />
+                                          <span>{tipoCfg.curto}</span>
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="start" className="min-w-[200px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
+                                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                          Tipo de Demanda
+                                        </div>
+                                        {TIPOS_DEMANDA.map((t) => {
+                                          const isSel = tipoCfg?.valor === t.valor;
+                                          return (
+                                            <DropdownMenuItem
+                                              key={t.valor}
+                                              onClick={() => onQuickUpdate?.(demanda, { tipo_demanda: t.valor })}
+                                              className={`text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex flex-col items-start rounded-lg transition-colors my-0.5 ${
+                                                isSel ? 'bg-accent/80 font-bold' : ''
+                                              }`}
+                                            >
+                                              <div className="w-full flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
+                                                  <span className="font-semibold text-xs text-foreground">{t.curto}</span>
+                                                </div>
+                                                {isSel && <Check size={12} className="text-primary shrink-0" />}
+                                              </div>
+                                              <span className="text-[10px] text-muted-foreground pl-3.5 font-normal">
+                                                {t.nomeCompleto}
+                                              </span>
+                                            </DropdownMenuItem>
+                                          );
+                                        })}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                ) : canEdit && (
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center px-1.5 py-0.5 rounded-md border border-dashed border-border/80 text-[10px] font-medium text-muted-foreground/60 hover:text-foreground hover:border-border transition cursor-pointer"
+                                          title="Definir tipo de demanda"
+                                        >
+                                          + Demanda
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="start" className="min-w-[200px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
+                                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                          Tipo de Demanda
+                                        </div>
+                                        {TIPOS_DEMANDA.map((t) => (
+                                          <DropdownMenuItem
+                                            key={t.valor}
+                                            onClick={() => onQuickUpdate?.(demanda, { tipo_demanda: t.valor })}
+                                            className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex flex-col items-start rounded-lg transition-colors my-0.5"
+                                          >
+                                            <div className="w-full flex items-center gap-1.5">
+                                              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.cor }} />
+                                              <span className="font-semibold text-xs text-foreground">{t.curto}</span>
+                                            </div>
+                                            <span className="text-[10px] text-muted-foreground pl-3.5 font-normal">
+                                              {t.nomeCompleto}
+                                            </span>
+                                          </DropdownMenuItem>
+                                        ))}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Linha 5: Prazo, Avatares e Concluir rápido */}
@@ -371,24 +490,40 @@ export default function PrioridadesKanban({
                                 {/* Prazo */}
                                 <div className="flex items-center gap-1 min-w-0">
                                   {demanda.prazo ? (
-                                    <span
-                                      className={`font-semibold flex items-center gap-1 text-[10px] ${
-                                        alerta === 'hoje'
-                                          ? 'text-amber-600 dark:text-amber-400'
-                                          : alerta === 'vencido'
-                                          ? 'text-rose-600 dark:text-rose-400'
-                                          : 'text-muted-foreground'
-                                      }`}
-                                    >
-                                      {alerta === 'vencido' ? (
-                                        <AlertTriangle size={11} className="shrink-0" />
-                                      ) : (
-                                        <Calendar size={11} className="shrink-0 opacity-75" />
-                                      )}
-                                      <span className="truncate">
-                                        {alerta === 'hoje' ? 'Hoje' : formatarPrazo(demanda.prazo) || demanda.prazo}
+                                    alerta === 'entregue' ? (
+                                      <span className="font-semibold flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400" title="Arte entregue em revisão">
+                                        <CheckCircle2 size={11} className="shrink-0" />
+                                        <span className="truncate">
+                                          Entregue · {formatarPrazo(demanda.prazo)}
+                                        </span>
                                       </span>
-                                    </span>
+                                    ) : alerta === 'congelado' ? (
+                                      <span className="font-semibold flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400" title="Prazo congelado/pausado">
+                                        <PauseCircle size={11} className="shrink-0" />
+                                        <span className="truncate">
+                                          Pausado · {formatarPrazo(demanda.prazo)}
+                                        </span>
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className={`font-semibold flex items-center gap-1 text-[10px] ${
+                                          alerta === 'hoje'
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : alerta === 'vencido'
+                                            ? 'text-rose-600 dark:text-rose-400'
+                                            : 'text-muted-foreground'
+                                        }`}
+                                      >
+                                        {alerta === 'vencido' ? (
+                                          <AlertTriangle size={11} className="shrink-0" />
+                                        ) : (
+                                          <Calendar size={11} className="shrink-0 opacity-75" />
+                                        )}
+                                        <span className="truncate">
+                                          {alerta === 'hoje' ? 'Hoje' : formatarPrazo(demanda.prazo) || demanda.prazo}
+                                        </span>
+                                      </span>
+                                    )
                                   ) : (
                                     <span className="text-muted-foreground/40 text-[10px] italic">Sem prazo</span>
                                   )}

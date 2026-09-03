@@ -40,6 +40,9 @@ const STATUS_NAME_COLOR_MAP = {
   concluido: '#22c55e',
   'concluído': '#22c55e',
   finalizado: '#22c55e',
+  'sem briefing': '#64748b',
+  'c/ arquivo': '#0d9488',
+  'com arquivo': '#0d9488',
 };
 
 export function hexToRgba(hex, alpha = 1) {

@@ -2,41 +2,52 @@ import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Clock, Plus, Minus } from 'lucide-react';
+import { Clock, Plus, Minus, Sparkles, Check } from 'lucide-react';
+import { isStatusRevisao, isStatusPausa, calcularPrazoFuturo, formatarPrazoCompleto } from '@/lib/datas';
 
 export default function RegistrarAlteracaoDialog({ open, onClose, onConfirm, demanda }) {
   const [texto, setTexto] = useState('');
   const [diasAdicionar, setDiasAdicionar] = useState(0);
+  const [mudarParaStatus, setMudarParaStatus] = useState(null); // 'status_amostra' | 'status_criacao' | null
+
+  const emRevisao = useMemo(() => isStatusRevisao(demanda), [demanda]);
+  const emPausa = useMemo(() => isStatusPausa(demanda), [demanda]);
 
   useEffect(() => {
     if (open) {
       setTexto('');
       setDiasAdicionar(0);
+      setMudarParaStatus(null);
     }
   }, [open]);
 
   const previewNovoPrazo = useMemo(() => {
+    if (mudarParaStatus) {
+      const prazoAuto = calcularPrazoFuturo(1);
+      return formatarPrazoCompleto(prazoAuto);
+    }
     if (diasAdicionar === 0) return null;
     const base = demanda?.prazo ? new Date(demanda.prazo + 'T12:00:00') : new Date();
-    base.setDate(base.getDate() + diasAdicionar);
-    const d = String(base.getDate()).padStart(2, '0');
-    const m = String(base.getMonth() + 1).padStart(2, '0');
-    const y = base.getFullYear();
-    return `${d}/${m}/${y}`;
-  }, [demanda?.prazo, diasAdicionar]);
+    const novoPrazoCalculado = calcularPrazoFuturo(diasAdicionar, base);
+    return formatarPrazoCompleto(novoPrazoCalculado);
+  }, [demanda?.prazo, diasAdicionar, mudarParaStatus]);
 
   function confirmar() {
     if (!texto.trim()) return;
     let novoPrazo = null;
-    if (diasAdicionar !== 0) {
+    let diasAjustados = diasAdicionar;
+    let novoStatusId = null;
+
+    if (mudarParaStatus) {
+      novoStatusId = mudarParaStatus;
+      novoPrazo = calcularPrazoFuturo(1);
+      diasAjustados = 1;
+    } else if (diasAdicionar !== 0) {
       const base = demanda?.prazo ? new Date(demanda.prazo + 'T12:00:00') : new Date();
-      base.setDate(base.getDate() + diasAdicionar);
-      const y = base.getFullYear();
-      const m = String(base.getMonth() + 1).padStart(2, '0');
-      const d = String(base.getDate()).padStart(2, '0');
-      novoPrazo = `${y}-${m}-${d}`;
+      novoPrazo = calcularPrazoFuturo(diasAdicionar, base);
     }
-    onConfirm(texto.trim(), { novoPrazo, diasAjustados: diasAdicionar });
+
+    onConfirm(texto.trim(), { novoPrazo, diasAjustados, novoStatusId });
   }
 
   return (
@@ -61,8 +72,92 @@ export default function RegistrarAlteracaoDialog({ open, onClose, onConfirm, dem
             className="resize-none text-xs bg-background border-border text-foreground"
           />
 
+          {/* Se a demanda estiver em Revisão, atalho inteligente para colocar em Amostra (prazo de 1 dia) */}
+          {emRevisao && (
+            <div
+              onClick={() => {
+                setMudarParaStatus((prev) => {
+                  const proximo = prev === 'status_amostra' ? null : 'status_amostra';
+                  if (proximo) setDiasAdicionar(0);
+                  return proximo;
+                });
+              }}
+              className={`p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between ${
+                mudarParaStatus === 'status_amostra'
+                  ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-700 dark:text-cyan-300 shadow-2xs'
+                  : 'bg-muted/50 border-border hover:bg-muted/80 text-muted-foreground'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+                    mudarParaStatus === 'status_amostra'
+                      ? 'bg-cyan-500 border-cyan-600 text-white'
+                      : 'border-muted-foreground/40 bg-card'
+                  }`}
+                >
+                  {mudarParaStatus === 'status_amostra' && <Check size={11} className="stroke-[3]" />}
+                </div>
+                <div>
+                  <div className="font-semibold text-xs flex items-center gap-1.5">
+                    <Sparkles size={12} className={mudarParaStatus === 'status_amostra' ? 'text-cyan-600 dark:text-cyan-400' : 'text-muted-foreground'} />
+                    Voltar para status "Amostra"
+                  </div>
+                  <div className="text-[10px] opacity-80">
+                    Define prazo automático de 1 dia para confecção da amostra
+                  </div>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-card border border-border/60">
+                +1 dia
+              </span>
+            </div>
+          )}
+
+          {/* Se a demanda estiver em Pausa/Parado/Pendente, atalho para reativar e voltar para Criação (prazo de 1 dia) */}
+          {emPausa && (
+            <div
+              onClick={() => {
+                setMudarParaStatus((prev) => {
+                  const proximo = prev === 'status_criacao' ? null : 'status_criacao';
+                  if (proximo) setDiasAdicionar(0);
+                  return proximo;
+                });
+              }}
+              className={`p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between ${
+                mudarParaStatus === 'status_criacao'
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300 shadow-2xs'
+                  : 'bg-muted/50 border-border hover:bg-muted/80 text-muted-foreground'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+                    mudarParaStatus === 'status_criacao'
+                      ? 'bg-amber-500 border-amber-600 text-white'
+                      : 'border-muted-foreground/40 bg-card'
+                  }`}
+                >
+                  {mudarParaStatus === 'status_criacao' && <Check size={11} className="stroke-[3]" />}
+                </div>
+                <div>
+                  <div className="font-semibold text-xs flex items-center gap-1.5">
+                    <Sparkles size={12} className={mudarParaStatus === 'status_criacao' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'} />
+                    Reativar e retornar para "Criação"
+                  </div>
+                  <div className="text-[10px] opacity-80">
+                    Descongela a demanda e define novo prazo de 1 dia (amanhã)
+                  </div>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-card border border-border/60">
+                +1 dia
+              </span>
+            </div>
+          )}
+
           {/* Opção para aumentar o prazo de entrega */}
-          <div className="p-2.5 rounded-lg bg-secondary/60 border border-border/80 space-y-2 text-xs">
+          <div className={`p-2.5 rounded-lg bg-secondary/60 border border-border/80 space-y-2 text-xs ${mudarParaStatus ? 'opacity-40 pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
                 <Clock size={13} className="text-amber-500" />
@@ -124,16 +219,26 @@ export default function RegistrarAlteracaoDialog({ open, onClose, onConfirm, dem
               </div>
             </div>
 
-            {previewNovoPrazo && (
+            {previewNovoPrazo && !mudarParaStatus && (
               <div className="flex items-center justify-between text-[11px] px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-medium">
                 <span className="flex items-center gap-1">
                   <Clock size={11} />
                   <span>Novo prazo:</span>
                 </span>
-                <span className="font-bold">{previewNovoPrazo} (+{diasAdicionar} {diasAdicionar === 1 ? 'dia' : 'dias'})</span>
+                <span className="font-bold">{previewNovoPrazo} (+{diasAdicionar} {diasAdicionar === 1 ? 'dia útil' : 'dias úteis'})</span>
               </div>
             )}
           </div>
+
+          {previewNovoPrazo && mudarParaStatus && (
+            <div className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-md bg-primary/10 border border-primary/25 text-primary font-medium">
+              <span className="flex items-center gap-1.5">
+                <Sparkles size={12} className="text-primary" />
+                <span>Novo prazo ({mudarParaStatus === 'status_amostra' ? 'Amostra' : 'Criação'}):</span>
+              </span>
+              <span className="font-bold">{previewNovoPrazo} (1 dia útil)</span>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -141,7 +246,11 @@ export default function RegistrarAlteracaoDialog({ open, onClose, onConfirm, dem
             Cancelar
           </Button>
           <Button onClick={confirmar} disabled={!texto.trim()} className="h-8 text-xs font-semibold">
-            {diasAdicionar > 0 ? `Registrar (+${diasAdicionar}d)` : 'Registrar alteração'}
+            {mudarParaStatus
+              ? `Registrar e ir para ${mudarParaStatus === 'status_amostra' ? 'Amostra' : 'Criação'} (+1d)`
+              : diasAdicionar > 0
+              ? `Registrar (+${diasAdicionar}d)`
+              : 'Registrar alteração'}
           </Button>
         </DialogFooter>
       </DialogContent>

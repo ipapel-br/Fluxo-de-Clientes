@@ -23,6 +23,7 @@ import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
 import { ACABAMENTOS } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
+import { isStatusAmostra, isStatusCriacao, calcularPrazoFuturo } from '@/lib/datas';
 
 const VAZIO = {
   cliente: '',
@@ -31,7 +32,7 @@ const VAZIO = {
   revenda: '',
   vendedor: '',
   designer: '',
-  fase_arte: '',
+  fase_arte: 'parado',
   complexidade: 'normal',
   prazo: '',
   status_id: '',
@@ -44,15 +45,15 @@ export default function DemandaForm({
   open,
   onClose,
   onSave,
+  onDelete,
   demanda,
   statuses,
-  vendedores = [],
-  revendas = [],
-  designers = [],
+  vendedores,
+  revendas,
+  designers,
   onCriarStatus,
   onGerenciarStatus,
   onRegistrarAlteracao,
-  onDelete,
 }) {
   const [form, setForm] = useState(VAZIO);
   const [salvando, setSalvando] = useState(false);
@@ -69,7 +70,7 @@ export default function DemandaForm({
             revenda: demanda.revenda || '',
             vendedor: demanda.vendedor || '',
             designer: demanda.designer || '',
-            fase_arte: demanda.fase_arte || '',
+            fase_arte: demanda.fase_arte || 'parado',
             complexidade: demanda.complexidade || 'normal',
             prazo: demanda.prazo || '',
             status_id: demanda.status_id || '',
@@ -97,7 +98,7 @@ export default function DemandaForm({
         revenda: (form.revenda || '').trim(),
         vendedor: (form.vendedor || '').trim(),
         designer: (form.designer || '').trim(),
-        fase_arte: form.fase_arte || '',
+        fase_arte: form.fase_arte || 'parado',
         complexidade: form.complexidade || 'normal',
         prazo: form.prazo || '',
         status_id: form.status_id || '',
@@ -467,7 +468,13 @@ export default function DemandaForm({
               <StatusSelect
                 statuses={statuses}
                 value={form.status_id}
-                onChange={(v) => set('status_id', v)}
+                onChange={(v) => {
+                  set('status_id', v);
+                  const st = statuses.find((s) => s.id === v);
+                  if (st && (isStatusAmostra(st) || isStatusCriacao(st)) && form.status_id !== v) {
+                    set('prazo', calcularPrazoFuturo(1));
+                  }
+                }}
                 onCriarNovo={onCriarStatus}
                 onGerenciar={onGerenciarStatus}
               />

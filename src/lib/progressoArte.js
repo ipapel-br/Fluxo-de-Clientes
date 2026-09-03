@@ -1,5 +1,13 @@
 export const FASES_ARTE = [
   {
+    valor: 'parado',
+    label: 'Arte parada',
+    curto: 'Parado',
+    cor: '#ef4444', // Red
+    descricao: 'Aguardando início do designer',
+    icone: '0/3',
+  },
+  {
     valor: 'iniciando',
     label: 'Iniciando arte',
     curto: 'Iniciando',

@@ -4,6 +4,8 @@ import {
   Plus,
   Minus,
   Check,
+  CheckCircle2,
+  PauseCircle,
   Printer,
   MoreHorizontal,
   Pencil,
@@ -30,7 +32,14 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import UserAvatar from '@/components/ui/UserAvatar';
-import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
+import {
+  tipoAlertaPrazo,
+  formatarPrazo,
+  isStatusAmostra,
+  isStatusCriacao,
+  isStatusPausa,
+  calcularPrazoFuturo,
+} from '@/lib/datas';
 import { formatarDataHistorico } from '@/lib/historico';
 import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
@@ -98,11 +107,25 @@ export default function DemandaDrawer({
 
   // Identificação de prioridade e prazo
   const prioridadeValor = (demanda.etiqueta || '').toLowerCase();
-  const alerta = tipoAlertaPrazo(demanda.prazo);
+  const alerta = tipoAlertaPrazo(demanda.prazo, status || demanda);
   const faseArteCfg = faseArteConfig(demanda.fase_arte);
   const acabamentoCfg = acabamentoConfig(demanda.acabamento || 'Autocolante');
 
   const prazoTexto = (() => {
+    if (alerta === 'entregue') {
+      return {
+        data: demanda.prazo ? formatarPrazo(demanda.prazo) : 'Entregue',
+        status: 'Entregue',
+        isEntregue: true,
+      };
+    }
+    if (alerta === 'congelado') {
+      return {
+        data: demanda.prazo ? formatarPrazo(demanda.prazo) : 'Pausado',
+        status: 'Pausado',
+        isCongelado: true,
+      };
+    }
     if (!demanda.prazo) return null;
     if (alerta === 'hoje') return { data: 'Hoje', status: null, isHoje: true };
     if (alerta === 'vencido') return { data: formatarPrazo(demanda.prazo) || demanda.prazo, status: 'Vencido', isVencido: true };
@@ -274,8 +297,10 @@ export default function DemandaDrawer({
                     title={canEdit ? 'Clique para alterar o prazo' : ''}
                   >
                     {prazoTexto ? (
-                      <span className={prazoTexto.isHoje ? 'text-amber-500 font-semibold' : prazoTexto.isVencido ? 'text-rose-500 font-semibold' : ''}>
-                        {prazoTexto.data}
+                      <span className={prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center gap-1' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400 font-semibold inline-flex items-center gap-1' : prazoTexto.isHoje ? 'text-amber-500 font-semibold' : prazoTexto.isVencido ? 'text-rose-500 font-semibold' : ''}>
+                        {prazoTexto.isEntregue && <CheckCircle2 size={11} className="shrink-0" />}
+                        {prazoTexto.isCongelado && <PauseCircle size={11} className="shrink-0" />}
+                        {prazoTexto.data} {prazoTexto.isEntregue ? '(Entregue)' : prazoTexto.isCongelado ? '(Congelado)' : ''}
                       </span>
                     ) : (
                       <span className="text-muted-foreground/60 italic">Sem prazo</span>
@@ -309,6 +334,7 @@ export default function DemandaDrawer({
                     <span
                       style={getStatusBadgeStyle(status)}
                       className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.2 text-[11px] font-medium"
+                      title={status.descricao || (status.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : status.nome)}
                     >
                       <span
                         className="h-1.5 w-1.5 rounded-full shrink-0"
@@ -331,7 +357,14 @@ export default function DemandaDrawer({
                   return (
                     <DropdownMenuItem
                       key={st.id}
-                      onClick={() => onQuickUpdate?.(demanda, { status_id: st.id })}
+                      title={st.descricao || (st.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : st.nome)}
+                      onClick={() => {
+                        const patch = { status_id: st.id };
+                        if (isStatusAmostra(st) || isStatusCriacao(st)) {
+                          patch.prazo = calcularPrazoFuturo(1);
+                        }
+                        onQuickUpdate?.(demanda, patch);
+                      }}
                       className={`text-xs py-2 px-2.5 cursor-pointer hover:bg-accent flex items-center justify-between rounded-lg transition-colors my-0.5 ${
                         isSelected ? 'bg-accent/80 font-semibold' : ''
                       }`}
@@ -494,11 +527,13 @@ export default function DemandaDrawer({
                         >
                           {prazoTexto ? (
                             <>
-                              <span className={`font-semibold ${prazoTexto.isHoje ? 'text-amber-500' : prazoTexto.isVencido ? 'text-rose-500' : 'text-foreground'}`}>
+                              <span className={`font-semibold ${prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400' : prazoTexto.isHoje ? 'text-amber-500' : prazoTexto.isVencido ? 'text-rose-500' : 'text-foreground'}`}>
                                 {prazoTexto.data}
                               </span>
                               {prazoTexto.status && (
-                                <span className="text-rose-500 font-medium text-[11px]">
+                                <span className={`${prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-rose-500'} font-medium text-[11px] inline-flex items-center gap-0.5`}>
+                                  {prazoTexto.isEntregue && <CheckCircle2 size={11} className="shrink-0" />}
+                                  {prazoTexto.isCongelado && <PauseCircle size={11} className="shrink-0" />}
                                   ({prazoTexto.status})
                                 </span>
                               )}
@@ -589,7 +624,14 @@ export default function DemandaDrawer({
                           return (
                             <DropdownMenuItem
                               key={st.id}
-                              onClick={() => onQuickUpdate?.(demanda, { status_id: st.id })}
+                              title={st.descricao || (st.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : st.nome)}
+                              onClick={() => {
+                                const patch = { status_id: st.id };
+                                if (isStatusAmostra(st) || isStatusCriacao(st)) {
+                                  patch.prazo = calcularPrazoFuturo(1);
+                                }
+                                onQuickUpdate?.(demanda, patch);
+                              }}
                               className={`text-xs py-2 px-2.5 cursor-pointer hover:bg-accent flex items-center justify-between rounded-lg transition-colors my-0.5 ${
                                 isSelected ? 'bg-accent/80 font-semibold' : ''
                               }`}

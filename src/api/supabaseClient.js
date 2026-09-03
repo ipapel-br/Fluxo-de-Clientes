@@ -81,7 +81,7 @@ export function normalizeDemanda(item) {
     etiqueta,
     etiquetas: item.etiquetas || (etiqueta ? [etiqueta] : []),
     designer: item.designer || '',
-    fase_arte: item.fase_arte || '',
+    fase_arte: item.fase_arte || 'parado',
     vendedor: item.vendedor || '',
     revenda: item.revenda || '',
     acabamento: item.acabamento || 'Autocolante',
