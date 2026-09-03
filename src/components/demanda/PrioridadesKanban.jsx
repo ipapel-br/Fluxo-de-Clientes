@@ -365,7 +365,7 @@ export default function PrioridadesKanban({
                                           <span>{faseCfg.curto || faseCfg.label}</span>
                                         </button>
                                       </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="start" className="min-w-[170px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
+                                      <DropdownMenuContent align="start" className="w-max min-w-[140px] p-1.5 bg-popover border-border text-popover-foreground rounded-xl shadow-2xl">
                                         <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                                           Etapa da Arte
                                         </div>
@@ -375,7 +375,7 @@ export default function PrioridadesKanban({
                                             <DropdownMenuItem
                                               key={f.valor}
                                               onClick={() => onQuickUpdate?.(demanda, { fase_arte: f.valor })}
-                                              className={`text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center justify-between rounded-lg transition-colors my-0.5 ${
+                                              className={`text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center justify-between gap-3 rounded-lg transition-colors my-0.5 whitespace-nowrap ${
                                                 isSel ? 'bg-accent/80 font-bold' : ''
                                               }`}
                                             >

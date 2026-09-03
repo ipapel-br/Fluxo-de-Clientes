@@ -29,16 +29,16 @@ export const TIPOS_DEMANDA = [
     valor: 'personalizacao_zero',
     curto: 'P. DO ZERO',
     nomeCompleto: 'PERSONALIZAÇÃO DO ZERO',
-    cor: '#f97316', // Orange
-    bgClass: 'bg-orange-500/10 text-orange-500 border-orange-500/30',
+    cor: '#ef4444', // Red
+    bgClass: 'bg-red-500/10 text-red-500 border-red-500/30',
     descricao: 'Criação e ilustração autoral desenvolvida do zero',
   },
   {
     valor: 'shutter_banco',
     curto: 'SHUTTER/BANCO',
     nomeCompleto: 'PERSONALIZAÇÃO COM BANCO/SHUTTER',
-    cor: '#10b981', // Emerald
-    bgClass: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
+    cor: '#f97316', // Orange
+    bgClass: 'bg-orange-500/10 text-orange-500 border-orange-500/30',
     descricao: 'Composição de arte utilizando elementos de bancos de imagens (Shutterstock, Freepik, etc)',
   },
   {

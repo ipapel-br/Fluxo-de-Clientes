@@ -504,12 +504,12 @@ export default function DemandaItem({
                     </span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[180px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-xl">
+                <DropdownMenuContent align="start" className="w-max min-w-[140px] p-1 bg-popover border-border text-popover-foreground rounded-lg shadow-xl">
                   {FASES_ARTE.map((f) => (
                     <DropdownMenuItem
                       key={f.valor}
                       onClick={() => onQuickUpdate?.(demanda, { fase_arte: f.valor })}
-                      className="text-xs py-1.5 px-2 cursor-pointer hover:bg-accent flex items-center gap-2"
+                      className="text-xs py-1.5 px-2.5 cursor-pointer hover:bg-accent flex items-center gap-2 whitespace-nowrap"
                     >
                       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: f.cor }} />
                       <span>{f.label}</span>
