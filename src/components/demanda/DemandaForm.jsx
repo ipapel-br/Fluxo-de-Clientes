@@ -23,7 +23,7 @@ import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
 import { TIPOS_DEMANDA, tipoDemandaConfig } from '@/lib/tiposDemanda';
 import { ACABAMENTOS } from '@/lib/acabamentos';
 import { hexToRgba } from '@/lib/statusColors';
-import { isStatusAmostra, isStatusCriacao, calcularPrazoFuturo } from '@/lib/datas';
+import { isStatusAmostra, isStatusCriacao, isStatusSemBriefing, calcularPrazoFuturo } from '@/lib/datas';
 
 const VAZIO = {
   cliente: '',
@@ -471,7 +471,9 @@ export default function DemandaForm({
                 onChange={(v) => {
                   set('status_id', v);
                   const st = statuses.find((s) => s.id === v);
-                  if (st && (isStatusAmostra(st) || isStatusCriacao(st)) && form.status_id !== v) {
+                  const stAnterior = statuses.find((s) => s.id === form.status_id);
+                  const ehSemBriefing = isStatusSemBriefing(st) || isStatusSemBriefing(stAnterior);
+                  if (!ehSemBriefing && st && (isStatusAmostra(st) || isStatusCriacao(st)) && form.status_id !== v) {
                     set('prazo', calcularPrazoFuturo(1));
                   }
                 }}

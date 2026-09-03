@@ -73,7 +73,9 @@ import {
   calcularScorePrazoProximo,
   isStatusAmostra,
   isStatusCriacao,
+  isStatusRevisao,
   isStatusPausa,
+  isStatusSemBriefing,
   calcularPrazoFuturo,
 } from '@/lib/datas';
 import { COMPLEXIDADES, complexidadeConfig } from '@/lib/complexidade';
@@ -487,7 +489,7 @@ export default function Prioridades() {
           return sortConfig.direction === 'asc' ? diff : -diff;
         });
       } else if (sortConfig.key === 'etapa') {
-        const etapaIdx = { parado: 0, iniciando: 1, no_meio: 2, finalizando: 3 };
+        const etapaIdx = { parado: 0, iniciando: 1, no_meio: 2, finalizando: 3, concluido: 4, alteracao: 5 };
         result = [...result].sort((a, b) => {
           const eA = etapaIdx[a.fase_arte] ?? 0;
           const eB = etapaIdx[b.fase_arte] ?? 0;
@@ -656,9 +658,11 @@ export default function Prioridades() {
   }, [ativas]);
 
   const etapaDemandCounts = useMemo(() => {
-    const map = { parado: 0, iniciando: 0, no_meio: 0, finalizando: 0 };
+    const map = { parado: 0, iniciando: 0, no_meio: 0, finalizando: 0, concluido: 0, alteracao: 0 };
     ativas.forEach((d) => {
-      const k = (d.fase_arte || 'parado').toLowerCase();
+      let k = (d.fase_arte || 'parado').toLowerCase().trim();
+      if (k === 'concluído' || k === 'arte aprovada') k = 'concluido';
+      if (k === 'alteração') k = 'alteracao';
       if (map[k] !== undefined) map[k]++;
       else map.parado++;
     });
@@ -1026,17 +1030,35 @@ export default function Prioridades() {
         }
       }
 
-      // Se voltar ou mudar para Amostra: coloca prazo de 1 dia automaticamente!
-      if (isStatusAmostra(patch.status_id, statusMap)) {
-        if (!patch.prazo) {
-          patch.prazo = calcularPrazoFuturo(1);
-        }
-      }
+      // Sem Briefing: NÃO MEXE NO PRAZO! Mantém o prazo original (alteração de prazo é exclusivamente manual)
+      const ehSemBriefingDestino = isStatusSemBriefing(patch.status_id, statusMap);
+      const eraSemBriefingOrigem = isStatusSemBriefing(demanda.status_id, statusMap);
 
-      // Se voltar ou mudar para Criação: recalcula o prazo automaticamente (Data de Retorno + 1 dia)!
-      if (isStatusCriacao(patch.status_id, statusMap)) {
-        if (!patch.prazo) {
-          patch.prazo = calcularPrazoFuturo(1);
+      if (!ehSemBriefingDestino && !eraSemBriefingOrigem) {
+        // Se voltar ou mudar para Amostra: coloca prazo de 1 dia automaticamente!
+        if (isStatusAmostra(patch.status_id, statusMap)) {
+          if (!patch.prazo) {
+            patch.prazo = calcularPrazoFuturo(1);
+          }
+          patch.entregue_em = null;
+        }
+
+        // Se voltar ou mudar para Criação: recalcula o prazo automaticamente (Data de Retorno + 1 dia útil)!
+        if (isStatusCriacao(patch.status_id, statusMap)) {
+          if (!patch.prazo) {
+            patch.prazo = calcularPrazoFuturo(1);
+          }
+          patch.entregue_em = null;
+        }
+
+        // Se mover para Revisão: registra a entrega na data de hoje e ajusta o prazo para a entrega!
+        if (isStatusRevisao(patch.status_id, statusMap)) {
+          const hoje = new Date();
+          const y = hoje.getFullYear();
+          const m = String(hoje.getMonth() + 1).padStart(2, '0');
+          const d = String(hoje.getDate()).padStart(2, '0');
+          patch.entregue_em = hoje.toISOString();
+          patch.prazo = `${y}-${m}-${d}`;
         }
       }
     }
@@ -1052,7 +1074,7 @@ export default function Prioridades() {
 
       // Notificar sobre mudanças pontuais relevantes
       if (patch.fase_arte && patch.fase_arte !== demanda.fase_arte) {
-        const faseNomes = { parado: 'Arte parada', iniciando: 'Iniciando arte', no_meio: 'No meio da arte', finalizando: 'Finalizando arte' };
+        const faseNomes = { parado: 'Arte parada', iniciando: 'Iniciando arte', no_meio: 'No meio da arte', finalizando: 'Finalizando arte', concluido: 'Arte concluída', alteracao: 'Alteração' };
         emitirNotificacao({
           demanda: { ...demanda, ...patch },
           autor: usuario,
@@ -2222,6 +2244,26 @@ export default function Prioridades() {
                       >
                         <span>✨ Fase 3 (Finalizando)</span>
                         <span className="text-[10px] opacity-70">({etapaDemandCounts.finalizando || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'concluido' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'concluido' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>✅ Concluído</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.concluido || 0})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltros((prev) => ({ ...prev, etapa: 'alteracao' }))}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition ${
+                          filtros.etapa === 'alteracao' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60 text-foreground'
+                        }`}
+                      >
+                        <span>🔄 Alteração</span>
+                        <span className="text-[10px] opacity-70">({etapaDemandCounts.alteracao || 0})</span>
                       </button>
                     </div>
                   </PopoverContent>

@@ -51,8 +51,34 @@ export function isStatusAmostra(statusOrDemanda, statusMap = {}) {
   return false;
 }
 
+export function isStatusSemBriefing(statusOrDemanda, statusMap = {}) {
+  if (!statusOrDemanda) return false;
+  if (typeof statusOrDemanda === 'string') {
+    const s = statusOrDemanda.toLowerCase();
+    if (s === 'status_sem_briefing' || s.includes('briefing')) return true;
+    if (statusMap[statusOrDemanda]) {
+      const nome = (statusMap[statusOrDemanda].nome || '').toLowerCase();
+      return nome.includes('briefing');
+    }
+    return false;
+  }
+  if (statusOrDemanda.status_id) {
+    if (statusOrDemanda.status_id === 'status_sem_briefing') return true;
+    const st = statusMap[statusOrDemanda.status_id];
+    if (st) {
+      const n = (st.nome || '').toLowerCase();
+      if (st.id === 'status_sem_briefing' || n.includes('briefing')) return true;
+    }
+  }
+  const nome = (statusOrDemanda.nome || statusOrDemanda.status || statusOrDemanda.status_nome || '').toLowerCase();
+  if (nome.includes('briefing')) return true;
+  if (statusOrDemanda.id === 'status_sem_briefing') return true;
+  return false;
+}
+
 export function isStatusPausa(statusOrDemanda, statusMap = {}) {
   if (!statusOrDemanda) return false;
+  if (isStatusSemBriefing(statusOrDemanda, statusMap)) return false;
   if (typeof statusOrDemanda === 'string') {
     const s = statusOrDemanda.toLowerCase();
     if (
@@ -218,9 +244,31 @@ export function formatarPrazoCompleto(dataStr) {
   }
 }
 
+export function obterDataEntregaRevisao(demanda) {
+  if (!demanda) return '';
+  if (demanda.entregue_em) return demanda.entregue_em;
+  if (Array.isArray(demanda.historico)) {
+    const entradaRev = demanda.historico.find((h) => {
+      const txt = (h.texto || '').toLowerCase();
+      const pNome = (h.paraNome || '').toLowerCase();
+      return txt.includes('revis') || pNome.includes('revis');
+    });
+    if (entradaRev && entradaRev.data) {
+      return entradaRev.data;
+    }
+  }
+  if (demanda.updated_date) return demanda.updated_date;
+  return new Date().toISOString();
+}
+
 export function labelPrazo(dataStr, statusOrDemanda = null, statusMap = {}) {
   const t = tipoAlertaPrazo(dataStr, statusOrDemanda, statusMap);
-  if (t === 'entregue') return `Entregue · ${formatarPrazo(dataStr) || 'Em revisão'}`;
+  if (t === 'entregue') {
+    const dataRef = (statusOrDemanda && typeof statusOrDemanda === 'object')
+      ? (obterDataEntregaRevisao(statusOrDemanda) || dataStr)
+      : dataStr;
+    return `Entregue · ${formatarPrazo(dataRef) || 'Em revisão'}`;
+  }
   if (t === 'congelado') return `Congelado · ${formatarPrazo(dataStr) || 'Pausado'}`;
   if (t === 'hoje') return 'Hoje';
   if (t === 'amanha') return 'Amanhã';

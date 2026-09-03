@@ -29,9 +29,12 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import {
   tipoAlertaPrazo,
   formatarPrazo,
+  obterDataEntregaRevisao,
   isStatusAmostra,
   isStatusCriacao,
+  isStatusRevisao,
   isStatusPausa,
+  isStatusSemBriefing,
   calcularPrazoFuturo,
 } from '@/lib/datas';
 import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
@@ -98,8 +101,9 @@ export default function DemandaItem({
   // Formatação do Prazo e Status
   const prazoTexto = (() => {
     if (alerta === 'entregue') {
+      const dataEntregue = obterDataEntregaRevisao(demanda) || demanda.prazo;
       return {
-        data: demanda.prazo ? formatarPrazo(demanda.prazo) : 'Entregue',
+        data: dataEntregue ? formatarPrazo(dataEntregue) : 'Entregue',
         status: 'Entregue',
         isEntregue: true,
       };
@@ -390,8 +394,17 @@ export default function DemandaItem({
                         title={st.descricao || (st.nome === 'C/ Arquivo' ? 'Colocar arquivo impressão' : status.nome)}
                         onClick={() => {
                           const patch = { status_id: st.id };
-                          if (isStatusAmostra(st) || isStatusCriacao(st)) {
+                          const ehSemBriefing = isStatusSemBriefing(st) || isStatusSemBriefing(status);
+                          if (!ehSemBriefing && (isStatusAmostra(st) || isStatusCriacao(st))) {
                             patch.prazo = calcularPrazoFuturo(1);
+                            patch.entregue_em = null;
+                          } else if (isStatusRevisao(st)) {
+                            const hoje = new Date();
+                            const y = hoje.getFullYear();
+                            const m = String(hoje.getMonth() + 1).padStart(2, '0');
+                            const d = String(hoje.getDate()).padStart(2, '0');
+                            patch.entregue_em = hoje.toISOString();
+                            patch.prazo = `${y}-${m}-${d}`;
                           }
                           onQuickUpdate?.(demanda, patch);
                         }}

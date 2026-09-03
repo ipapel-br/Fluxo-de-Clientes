@@ -115,9 +115,12 @@ export function entradaRevenda(de, para, usuario, data = agoraIso()) {
 
 export function entradaFaseArte(de, para, usuario, data = agoraIso()) {
   const mapLabel = {
+    parado: 'Arte parada',
     iniciando: 'Iniciando arte',
     no_meio: 'No meio da arte',
     finalizando: 'Finalizando arte',
+    concluido: 'Arte concluída',
+    alteracao: 'Alteração',
   };
   const deTxt = de ? (mapLabel[de] || de) : 'Não iniciada';
   const paraTxt = para ? (mapLabel[para] || para) : 'Não iniciada';

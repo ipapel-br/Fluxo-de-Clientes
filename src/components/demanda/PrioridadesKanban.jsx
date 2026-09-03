@@ -26,7 +26,7 @@ import {
 import { getStatusColor, hexToRgba } from '@/lib/statusColors';
 import { complexidadeConfig } from '@/lib/complexidade';
 import { faseArteConfig, FASES_ARTE } from '@/lib/progressoArte';
-import { tipoAlertaPrazo, formatarPrazo } from '@/lib/datas';
+import { tipoAlertaPrazo, formatarPrazo, obterDataEntregaRevisao } from '@/lib/datas';
 import { tipoDemandaConfig, TIPOS_DEMANDA } from '@/lib/tiposDemanda';
 import { etiquetaConfig } from '@/lib/etiquetas';
 
@@ -494,7 +494,7 @@ export default function PrioridadesKanban({
                                       <span className="font-semibold flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400" title="Arte entregue em revisão">
                                         <CheckCircle2 size={11} className="shrink-0" />
                                         <span className="truncate">
-                                          Entregue · {formatarPrazo(demanda.prazo)}
+                                          Entregue · {formatarPrazo(obterDataEntregaRevisao(demanda) || demanda.prazo)}
                                         </span>
                                       </span>
                                     ) : alerta === 'congelado' ? (
