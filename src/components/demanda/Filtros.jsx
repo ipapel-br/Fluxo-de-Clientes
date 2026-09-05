@@ -325,8 +325,8 @@ export default function Filtros({
           )}
         </div>
 
-        {/* Seletor Lista / Kanban */}
-        {onViewModeChange && (
+        {/* Seletor Lista / Kanban - disponível apenas na aba "Todas" */}
+        {onViewModeChange && filtros.aba === 'todas' && (
           <div className="flex items-center rounded-lg border border-border bg-card p-1 h-10 shrink-0 shadow-2xs">
             <button
               type="button"

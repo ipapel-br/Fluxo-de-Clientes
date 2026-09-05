@@ -1509,7 +1509,7 @@ export default function Prioridades() {
               setSortConfig({ key: 'ordem', direction: 'asc' });
             }}
             contadores={contadores}
-            viewMode={viewMode}
+            viewMode={filtros.aba === 'todas' ? viewMode : 'lista'}
             onViewModeChange={handleSetViewMode}
             acoesExtras={
               (can('priority_import_csv') || can('priority_create')) && (
@@ -1628,8 +1628,8 @@ export default function Prioridades() {
           <div className="text-center py-20 text-muted-foreground rounded-2xl border border-dashed border-border bg-card/40 p-8">
             {filtrando ? 'Nenhuma demanda encontrada com os filtros.' : 'Nenhuma demanda ativa. Clique em "+ Nova demanda" para começar.'}
           </div>
-        ) : viewMode === 'kanban' ? (
-          /* Visualização em Kanban por Status */
+        ) : (viewMode === 'kanban' && filtros.aba === 'todas') ? (
+          /* Visualização em Kanban por Status (apenas na aba "Todas") */
           <DragDropContext onDragEnd={onDragEnd}>
             <PrioridadesKanban
               statuses={statuses}
