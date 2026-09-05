@@ -77,7 +77,7 @@ export default function Filtros({
   statuses = [],
   ordenacao = 'prioridade',
   setOrdenacao,
-  contadores = { todas: 0, minhas: 0, hoje: 0, atrasadas: 0, altaPrioridade: 0 },
+  contadores = { todas: 0, minhas: 0, hoje: 0, atrasadas: 0, altaPrioridade: 0, pendente: 0, amostra: 0, revisao: 0 },
   viewMode = 'lista',
   onViewModeChange,
   acoesExtras,
@@ -254,6 +254,48 @@ export default function Filtros({
             }`}
           >
             {contadores.pendente ?? 0}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFiltros({ ...filtros, aba: 'amostra' })}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
+            filtros.aba === 'amostra'
+              ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-semibold border border-cyan-500/30 shadow-xs'
+              : 'text-cyan-600/90 dark:text-cyan-400/90 hover:text-cyan-700 dark:hover:text-cyan-300 hover:bg-cyan-500/10'
+          }`}
+        >
+          <span className="font-semibold text-cyan-600 dark:text-cyan-400">Amostra</span>
+          <span
+            className={`px-1.5 py-0.2 rounded-md text-[11px] font-bold ${
+              filtros.aba === 'amostra'
+                ? 'bg-cyan-500/25 text-cyan-800 dark:text-cyan-200'
+                : 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400'
+            }`}
+          >
+            {contadores.amostra ?? 0}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFiltros({ ...filtros, aba: 'revisao' })}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
+            filtros.aba === 'revisao'
+              ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 font-semibold border border-orange-500/30 shadow-xs'
+              : 'text-orange-600/90 dark:text-orange-400/90 hover:text-orange-700 dark:hover:text-orange-300 hover:bg-orange-500/10'
+          }`}
+        >
+          <span className="font-semibold text-orange-600 dark:text-orange-400">Revisão</span>
+          <span
+            className={`px-1.5 py-0.2 rounded-md text-[11px] font-bold ${
+              filtros.aba === 'revisao'
+                ? 'bg-orange-500/25 text-orange-800 dark:text-orange-200'
+                : 'bg-orange-500/15 text-orange-700 dark:text-orange-400'
+            }`}
+          >
+            {contadores.revisao ?? 0}
           </span>
         </button>
       </div>

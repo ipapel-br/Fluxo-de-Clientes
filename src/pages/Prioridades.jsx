@@ -101,7 +101,7 @@ export default function Prioridades() {
   const [drawerSubTab, setDrawerSubTab] = useState('todas');
   const [filtros, setFiltros] = useState({
     busca: '',
-    aba: 'todas', // 'todas' | 'minhas' | 'hoje' | 'atrasadas' | 'alta_prioridade' | 'pendente'
+    aba: 'todas', // 'todas' | 'minhas' | 'hoje' | 'atrasadas' | 'alta_prioridade' | 'pendente' | 'amostra' | 'revisao' | 'amostra_revisao'
     vendedor: '',
     revenda: '',
     designer: '',
@@ -273,6 +273,8 @@ export default function Prioridades() {
     let atrasadas = 0;
     let altaPrioridade = 0;
     let pendente = 0;
+    let amostra = 0;
+    let revisao = 0;
 
     ativas.forEach((d) => {
       // Minhas (Designer ou Vendedor atribuído)
@@ -294,15 +296,30 @@ export default function Prioridades() {
       const et = (d.etiqueta || '').toLowerCase();
       if (et === 'alta' || et === 'urgente') altaPrioridade++;
 
-      // Pendente (Status ou Demanda/Etapa com 'amostra' ou 'revisão'/'revisao')
       const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
       const demTexto = (d.demanda || '').toLowerCase();
+
+      // Pendente (Status ou Demanda/Etapa com 'amostra' ou 'revisão'/'revisao')
       const isPendente =
         stNome.includes('amostra') ||
         stNome.includes('revis') ||
         demTexto.includes('amostra') ||
         demTexto.includes('revis');
       if (isPendente) pendente++;
+
+      // Amostra (Status de Amostra)
+      const isAmostra =
+        isStatusAmostra(d, statusMap) ||
+        d.status_id === 'status_amostra' ||
+        stNome.includes('amostra');
+      if (isAmostra) amostra++;
+
+      // Revisão (Status de Revisão)
+      const isRevisao =
+        isStatusRevisao(d, statusMap) ||
+        d.status_id === 'status_revisao' ||
+        stNome.includes('revis');
+      if (isRevisao) revisao++;
     });
 
     return {
@@ -312,6 +329,9 @@ export default function Prioridades() {
       atrasadas,
       altaPrioridade,
       pendente,
+      amostra,
+      revisao,
+      amostraRevisao: amostra + revisao,
     };
   }, [ativas, statusMap, usuario]);
 
@@ -381,6 +401,36 @@ export default function Prioridades() {
           stNome.includes('revis') ||
           demTexto.includes('amostra') ||
           demTexto.includes('revis')
+        );
+      });
+    } else if (filtros.aba === 'amostra') {
+      result = result.filter((d) => {
+        const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
+        return (
+          isStatusAmostra(d, statusMap) ||
+          d.status_id === 'status_amostra' ||
+          stNome.includes('amostra')
+        );
+      });
+    } else if (filtros.aba === 'revisao') {
+      result = result.filter((d) => {
+        const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
+        return (
+          isStatusRevisao(d, statusMap) ||
+          d.status_id === 'status_revisao' ||
+          stNome.includes('revis')
+        );
+      });
+    } else if (filtros.aba === 'amostra_revisao') {
+      result = result.filter((d) => {
+        const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
+        return (
+          isStatusAmostra(d, statusMap) ||
+          isStatusRevisao(d, statusMap) ||
+          d.status_id === 'status_amostra' ||
+          d.status_id === 'status_revisao' ||
+          stNome.includes('amostra') ||
+          stNome.includes('revis')
         );
       });
     }
@@ -1492,6 +1542,82 @@ export default function Prioridades() {
           <p className="text-xs text-muted-foreground mb-3 italic">
             Filtros ativos — reordenação desativada. Limpe os filtros para arrastar.
           </p>
+        )}
+
+        {(filtros.aba === 'amostra' || filtros.aba === 'revisao' || filtros.aba === 'amostra_revisao') && (
+          <div className="flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 rounded-xl border border-border/70 bg-card/70 shadow-xs backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                {filtros.aba === 'amostra' ? (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-cyan-500 shrink-0 shadow-xs" />
+                    Amostras em andamento
+                  </>
+                ) : filtros.aba === 'revisao' ? (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-orange-500 shrink-0 shadow-xs" />
+                    Revisões em andamento
+                  </>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-gradient-to-r from-cyan-500 to-orange-500 shrink-0 shadow-xs" />
+                    Amostras e Revisões
+                  </>
+                )}
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                ({visiveis.length} {visiveis.length === 1 ? 'demanda' : 'demandas'})
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/60 text-xs">
+              <button
+                type="button"
+                onClick={() => setFiltros((prev) => ({ ...prev, aba: 'amostra' }))}
+                className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 text-xs ${
+                  filtros.aba === 'amostra'
+                    ? 'bg-card text-cyan-600 dark:text-cyan-400 font-semibold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span>Amostra</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 font-bold">
+                  {contadores.amostra ?? 0}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFiltros((prev) => ({ ...prev, aba: 'revisao' }))}
+                className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 text-xs ${
+                  filtros.aba === 'revisao'
+                    ? 'bg-card text-orange-600 dark:text-orange-400 font-semibold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span>Revisão</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-orange-500/20 text-orange-700 dark:text-orange-300 font-bold">
+                  {contadores.revisao ?? 0}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFiltros((prev) => ({ ...prev, aba: 'amostra_revisao' }))}
+                className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 text-xs ${
+                  filtros.aba === 'amostra_revisao'
+                    ? 'bg-card text-foreground font-semibold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Exibir ambas simultaneamente"
+              >
+                <span>Ambas</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-muted-foreground/20 text-foreground font-bold">
+                  {contadores.amostraRevisao ?? ((contadores.amostra ?? 0) + (contadores.revisao ?? 0))}
+                </span>
+              </button>
+            </div>
+          </div>
         )}
 
         {loading ? (
