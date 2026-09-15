@@ -204,7 +204,8 @@ export function calcularPrazoFuturo(dias = 1, dataBase = new Date()) {
 }
 
 export function tipoAlertaPrazo(dataStr, statusOrDemanda = null, statusMap = {}) {
-  if (statusOrDemanda && isStatusRevisao(statusOrDemanda, statusMap)) {
+  // Se tiver entregue_em explicitamente preenchido na demanda, está entregue
+  if (statusOrDemanda && typeof statusOrDemanda === 'object' && statusOrDemanda.entregue_em) {
     return 'entregue';
   }
   if (statusOrDemanda && isStatusPausa(statusOrDemanda, statusMap)) {
@@ -247,27 +248,18 @@ export function formatarPrazoCompleto(dataStr) {
 export function obterDataEntregaRevisao(demanda) {
   if (!demanda) return '';
   if (demanda.entregue_em) return demanda.entregue_em;
-  if (Array.isArray(demanda.historico)) {
-    const entradaRev = demanda.historico.find((h) => {
-      const txt = (h.texto || '').toLowerCase();
-      const pNome = (h.paraNome || '').toLowerCase();
-      return txt.includes('revis') || pNome.includes('revis');
-    });
-    if (entradaRev && entradaRev.data) {
-      return entradaRev.data;
-    }
-  }
-  if (demanda.updated_date) return demanda.updated_date;
-  return new Date().toISOString();
+  return '';
 }
 
 export function labelPrazo(dataStr, statusOrDemanda = null, statusMap = {}) {
   const t = tipoAlertaPrazo(dataStr, statusOrDemanda, statusMap);
   if (t === 'entregue') {
     const dataRef = (statusOrDemanda && typeof statusOrDemanda === 'object')
-      ? (obterDataEntregaRevisao(statusOrDemanda) || dataStr)
-      : dataStr;
-    return `Entregue · ${formatarPrazo(dataRef) || 'Em revisão'}`;
+      ? (obterDataEntregaRevisao(statusOrDemanda) || '')
+      : '';
+    const prazoFmt = dataStr ? formatarPrazo(dataStr) : 'Sem prazo';
+    const entregueFmt = dataRef ? formatarPrazo(dataRef) : '';
+    return entregueFmt ? `${prazoFmt} (Entregue ${entregueFmt})` : `${prazoFmt} (Entregue)`;
   }
   if (t === 'congelado') return `Congelado · ${formatarPrazo(dataStr) || 'Pausado'}`;
   if (t === 'hoje') return 'Hoje';

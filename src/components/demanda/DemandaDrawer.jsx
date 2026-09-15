@@ -73,12 +73,18 @@ export default function DemandaDrawer({
   const { can, usuario } = useAuth();
   const canEdit = can('priority_edit');
   const canReorder = can('priority_reorder');
-  const [activeTab, setActiveTab] = useState(initialTab || 'detalhes'); // 'detalhes' | 'alteracoes'
-  const [abaAlteracoesFiltro, setAbaAlteracoesFiltro] = useState(initialSubTab || 'todas'); // 'todas' | 'prazos'
+  const [activeTab, setActiveTab] = useState(
+    initialTab === 'alteracoes' && initialSubTab === 'prazos'
+      ? 'prazos'
+      : (initialTab || 'detalhes')
+  ); // 'detalhes' | 'alteracoes' | 'prazos'
 
   useEffect(() => {
-    if (initialTab) setActiveTab(initialTab);
-    if (initialSubTab) setAbaAlteracoesFiltro(initialSubTab);
+    if (initialTab === 'alteracoes' && initialSubTab === 'prazos') {
+      setActiveTab('prazos');
+    } else if (initialTab) {
+      setActiveTab(initialTab);
+    }
   }, [demanda?.id, initialTab, initialSubTab]);
   const [prazoPopoverHeaderOpen, setPrazoPopoverHeaderOpen] = useState(false);
   const [prazoPopoverDetalhesOpen, setPrazoPopoverDetalhesOpen] = useState(false);
@@ -116,10 +122,13 @@ export default function DemandaDrawer({
 
   const prazoTexto = (() => {
     if (alerta === 'entregue') {
-      const dataEntregue = obterDataEntregaRevisao(demanda) || demanda.prazo;
+      const dataEntregue = obterDataEntregaRevisao(demanda);
+      const dataEntregueFormatada = dataEntregue ? formatarPrazo(dataEntregue) : '';
+      const statusLabel = dataEntregueFormatada ? `Entregue ${dataEntregueFormatada}` : 'Entregue';
       return {
-        data: dataEntregue ? formatarPrazo(dataEntregue) : 'Entregue',
-        status: 'Entregue',
+        data: demanda.prazo ? formatarPrazo(demanda.prazo) : 'Sem prazo',
+        dataEntregue: dataEntregueFormatada,
+        status: statusLabel,
         isEntregue: true,
       };
     }
@@ -196,14 +205,19 @@ export default function DemandaDrawer({
   const nomeEtapa = faseArteCfg?.label || 'Iniciando arte';
   const corEtapa = faseArteCfg?.cor || '#0284c7';
 
-  // Filtro de todas as alterações / orientações registradas para esta demanda
+  // Filtro de todas as alterações / orientações registradas para esta demanda (exclui estritamente registros de prazo e entrega)
   const alteracoesHistorico = (demanda.historico || []).filter(
-    (h) => h.tipo === 'situacao' || h.tipo === 'SITUACAO' || h.tipo === 'alteracao' || (!h.tipo && h.texto)
+    (h) =>
+      h.tipo !== 'prazo' &&
+      h.tipo !== 'entrega' &&
+      !h.prazo_novo &&
+      !h.prazo_antigo &&
+      (h.tipo === 'situacao' || h.tipo === 'SITUACAO' || h.tipo === 'alteracao' || (!h.tipo && h.texto))
   );
 
-  // Histórico dedicado apenas de alterações / prorrogações de prazos
+  // Histórico dedicado apenas de prazos e entregas (exclui alterações de briefing/situação que não mexem no prazo)
   const historicoPrazos = (demanda.historico || []).filter(
-    (h) => h.tipo === 'prazo' || h.prazo_novo || h.prazo_antigo
+    (h) => h.tipo === 'prazo' || h.tipo === 'entrega' || h.prazo_novo || h.prazo_antigo
   );
 
   // Atividades / Timeline geral
@@ -290,7 +304,7 @@ export default function DemandaDrawer({
 
           {/* Linha compacta: Prazo, Status e Prioridade */}
           <div className="flex items-center gap-2 mt-2 pt-1 text-xs text-muted-foreground flex-wrap">
-            {/* Prazo */}
+            {/* Prazo + Botão Entregue */}
             <div className="flex items-center gap-1.5">
               <Clock size={11} className="text-muted-foreground/70 shrink-0" />
               <Popover open={prazoPopoverHeaderOpen} onOpenChange={setPrazoPopoverHeaderOpen}>
@@ -304,7 +318,7 @@ export default function DemandaDrawer({
                       <span className={prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center gap-1' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400 font-semibold inline-flex items-center gap-1' : prazoTexto.isHoje ? 'text-amber-500 font-semibold' : prazoTexto.isVencido ? 'text-rose-500 font-semibold' : ''}>
                         {prazoTexto.isEntregue && <CheckCircle2 size={11} className="shrink-0" />}
                         {prazoTexto.isCongelado && <PauseCircle size={11} className="shrink-0" />}
-                        {prazoTexto.data} {prazoTexto.isEntregue ? '(Entregue)' : prazoTexto.isCongelado ? '(Congelado)' : ''}
+                        {prazoTexto.data} {prazoTexto.isEntregue ? `(${prazoTexto.status})` : prazoTexto.isCongelado ? '(Congelado)' : ''}
                       </span>
                     ) : (
                       <span className="text-muted-foreground/60 italic">Sem prazo</span>
@@ -322,6 +336,31 @@ export default function DemandaDrawer({
                   />
                 </PopoverContent>
               </Popover>
+
+              {/* Botão Marcar/Desmarcar Entregue */}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onQuickUpdate?.(demanda, {
+                      entregue_em: demanda.entregue_em ? null : new Date().toISOString(),
+                    });
+                  }}
+                  className={`p-0.5 rounded transition cursor-pointer ${
+                    demanda.entregue_em
+                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25'
+                      : 'text-muted-foreground/40 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-muted/80'
+                  }`}
+                  title={
+                    demanda.entregue_em
+                      ? `Entregue em ${formatarPrazo(demanda.entregue_em)}. Clique para desmarcar`
+                      : 'Marcar como entregue'
+                  }
+                  aria-label={demanda.entregue_em ? 'Desmarcar entrega' : 'Marcar como entregue'}
+                >
+                  <CheckCircle2 size={14} className={demanda.entregue_em ? 'fill-emerald-500/20' : ''} />
+                </button>
+              )}
             </div>
 
             <span className="text-border text-xs select-none">•</span>
@@ -366,15 +405,7 @@ export default function DemandaDrawer({
                         const patch = { status_id: st.id };
                         const ehSemBriefing = isStatusSemBriefing(st) || isStatusSemBriefing(status);
                         if (!ehSemBriefing && (isStatusAmostra(st) || isStatusCriacao(st))) {
-                          patch.prazo = calcularPrazoFuturo(1);
                           patch.entregue_em = null;
-                        } else if (isStatusRevisao(st)) {
-                          const hoje = new Date();
-                          const y = hoje.getFullYear();
-                          const m = String(hoje.getMonth() + 1).padStart(2, '0');
-                          const d = String(hoje.getDate()).padStart(2, '0');
-                          patch.entregue_em = hoje.toISOString();
-                          patch.prazo = `${y}-${m}-${d}`;
                         }
                         onQuickUpdate?.(demanda, patch);
                       }}
@@ -429,12 +460,12 @@ export default function DemandaDrawer({
             </DropdownMenu>
           </div>
 
-          {/* Abas Superiores do Drawer: Detalhes x Alterações (Tabs mínimas e alinhadas) */}
-          <div className="flex items-center gap-5 mt-3 border-b border-border/40">
+          {/* Abas Superiores do Drawer: Detalhes x Alterações x Histórico de Prazos */}
+          <div className="flex items-center gap-4 sm:gap-5 mt-3 border-b border-border/40 overflow-x-auto">
             <button
               type="button"
               onClick={() => setActiveTab('detalhes')}
-              className={`flex items-center gap-1.5 pb-2 text-xs font-medium border-b-2 transition cursor-pointer ${
+              className={`flex items-center gap-1.5 pb-2 text-xs font-medium border-b-2 transition cursor-pointer shrink-0 ${
                 activeTab === 'detalhes'
                   ? 'border-primary text-foreground font-semibold'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -446,7 +477,7 @@ export default function DemandaDrawer({
             <button
               type="button"
               onClick={() => setActiveTab('alteracoes')}
-              className={`flex items-center gap-1.5 pb-2 text-xs font-medium border-b-2 transition cursor-pointer ${
+              className={`flex items-center gap-1.5 pb-2 text-xs font-medium border-b-2 transition cursor-pointer shrink-0 ${
                 activeTab === 'alteracoes'
                   ? 'border-primary text-foreground font-semibold'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -461,6 +492,27 @@ export default function DemandaDrawer({
                     : 'bg-muted text-muted-foreground'
                 }`}>
                   {alteracoesHistorico.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('prazos')}
+              className={`flex items-center gap-1.5 pb-2 text-xs font-medium border-b-2 transition cursor-pointer shrink-0 ${
+                activeTab === 'prazos'
+                  ? 'border-primary text-foreground font-semibold'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Clock size={13} />
+              <span>Histórico de Prazos</span>
+              {historicoPrazos.length > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  activeTab === 'prazos'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                }`}>
+                  {historicoPrazos.length}
                 </span>
               )}
             </button>
@@ -521,8 +573,7 @@ export default function DemandaDrawer({
                         <button
                           type="button"
                           onClick={() => {
-                            setActiveTab('alteracoes');
-                            setAbaAlteracoesFiltro('prazos');
+                            setActiveTab('prazos');
                           }}
                           className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition cursor-pointer"
                           title="Ver histórico de alterações deste prazo"
@@ -532,42 +583,69 @@ export default function DemandaDrawer({
                         </button>
                       )}
                     </div>
-                    <Popover open={prazoPopoverDetalhesOpen} onOpenChange={setPrazoPopoverDetalhesOpen}>
-                      <PopoverTrigger asChild disabled={!canEdit}>
+                    <div className="flex items-center gap-1.5">
+                      <Popover open={prazoPopoverDetalhesOpen} onOpenChange={setPrazoPopoverDetalhesOpen}>
+                        <PopoverTrigger asChild disabled={!canEdit}>
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 text-xs transition cursor-pointer disabled:cursor-default"
+                          >
+                            {prazoTexto ? (
+                              <>
+                                <span className={`font-semibold ${prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400' : prazoTexto.isHoje ? 'text-amber-500' : prazoTexto.isVencido ? 'text-rose-500' : 'text-foreground'}`}>
+                                  {prazoTexto.data}
+                                </span>
+                                {prazoTexto.status && (
+                                  <span className={`${prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-rose-500'} font-medium text-[11px] inline-flex items-center gap-0.5`}>
+                                    {prazoTexto.isEntregue && <CheckCircle2 size={11} className="shrink-0" />}
+                                    {prazoTexto.isCongelado && <PauseCircle size={11} className="shrink-0" />}
+                                    ({prazoTexto.status})
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground/50 italic font-normal">Definir prazo</span>
+                            )}
+                            {canEdit && <ChevronDown size={12} className="text-muted-foreground opacity-0 group-hover:opacity-60 hover:opacity-100 transition" />}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 bg-popover border-border text-popover-foreground" align="end">
+                          <Calendar
+                            mode="single"
+                            selected={prazoDate}
+                            onSelect={handleSelectPrazo}
+                            locale={ptBR}
+                            initialFocus
+                            className="bg-popover text-popover-foreground rounded-lg"
+                          />
+                        </PopoverContent>
+                      </Popover>
+
+                      {/* Botão Marcar/Desmarcar Entregue */}
+                      {canEdit && (
                         <button
                           type="button"
-                          className="flex items-center gap-1.5 text-xs transition cursor-pointer disabled:cursor-default"
+                          onClick={() => {
+                            onQuickUpdate?.(demanda, {
+                              entregue_em: demanda.entregue_em ? null : new Date().toISOString(),
+                            });
+                          }}
+                          className={`p-1 rounded transition cursor-pointer ${
+                            demanda.entregue_em
+                              ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25'
+                              : 'text-muted-foreground/40 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-muted/80'
+                          }`}
+                          title={
+                            demanda.entregue_em
+                              ? `Entregue em ${formatarPrazo(demanda.entregue_em)}. Clique para desmarcar`
+                              : 'Marcar como entregue'
+                          }
+                          aria-label={demanda.entregue_em ? 'Desmarcar entrega' : 'Marcar como entregue'}
                         >
-                          {prazoTexto ? (
-                            <>
-                              <span className={`font-semibold ${prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400' : prazoTexto.isHoje ? 'text-amber-500' : prazoTexto.isVencido ? 'text-rose-500' : 'text-foreground'}`}>
-                                {prazoTexto.data}
-                              </span>
-                              {prazoTexto.status && (
-                                <span className={`${prazoTexto.isEntregue ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : prazoTexto.isCongelado ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-rose-500'} font-medium text-[11px] inline-flex items-center gap-0.5`}>
-                                  {prazoTexto.isEntregue && <CheckCircle2 size={11} className="shrink-0" />}
-                                  {prazoTexto.isCongelado && <PauseCircle size={11} className="shrink-0" />}
-                                  ({prazoTexto.status})
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground/50 italic font-normal">Definir prazo</span>
-                          )}
-                          {canEdit && <ChevronDown size={12} className="text-muted-foreground opacity-0 group-hover:opacity-60 hover:opacity-100 transition" />}
+                          <CheckCircle2 size={15} className={demanda.entregue_em ? 'fill-emerald-500/20' : ''} />
                         </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 bg-popover border-border text-popover-foreground" align="end">
-                        <Calendar
-                          mode="single"
-                          selected={prazoDate}
-                          onSelect={handleSelectPrazo}
-                          locale={ptBR}
-                          initialFocus
-                          className="bg-popover text-popover-foreground rounded-lg"
-                        />
-                      </PopoverContent>
-                    </Popover>
+                      )}
+                    </div>
                   </div>
 
                   {/* Etapa */}
@@ -642,15 +720,7 @@ export default function DemandaDrawer({
                                 const patch = { status_id: st.id };
                                 const ehSemBriefing = isStatusSemBriefing(st) || isStatusSemBriefing(status);
                                 if (!ehSemBriefing && (isStatusAmostra(st) || isStatusCriacao(st))) {
-                                  patch.prazo = calcularPrazoFuturo(1);
                                   patch.entregue_em = null;
-                                } else if (isStatusRevisao(st)) {
-                                  const hoje = new Date();
-                                  const y = hoje.getFullYear();
-                                  const m = String(hoje.getMonth() + 1).padStart(2, '0');
-                                  const d = String(hoje.getDate()).padStart(2, '0');
-                                  patch.entregue_em = hoje.toISOString();
-                                  patch.prazo = `${y}-${m}-${d}`;
                                 }
                                 onQuickUpdate?.(demanda, patch);
                               }}
@@ -1106,8 +1176,8 @@ export default function DemandaDrawer({
                 )}
               </div>
             </>
-          ) : (
-            /* Aba: ALTERAÇÕES E PEDIDOS DO CLIENTE + HISTÓRICO DE PRAZOS */
+          ) : activeTab === 'alteracoes' ? (
+            /* Aba: ALTERAÇÕES E PEDIDOS DO CLIENTE (Exclusiva, sem histórico de prazos) */
             <div className="space-y-4">
 
               {/* Orientação Atual / Briefing da Demanda */}
@@ -1155,13 +1225,13 @@ export default function DemandaDrawer({
                       </p>
                     </div>
                     {canEdit && (
-                      <Pencil size={11} className="opacity-0 group-hover/desc:opacity-60 hover:opacity-100 text-muted-foreground shrink-0 self-center transition" />
+                      <Pencil size={11} className="opacity-0 group/desc:opacity-60 hover:opacity-100 text-muted-foreground shrink-0 self-center transition" />
                     )}
                   </div>
                 )}
               </div>
               
-              {/* Formulário limpo sem grande card externo */}
+              {/* Formulário de Nova Alteração */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-xs px-0.5">
                   <label className="font-medium text-foreground">
@@ -1170,7 +1240,6 @@ export default function DemandaDrawer({
                   <span className="text-[10px] text-muted-foreground">Ctrl+Enter para enviar</span>
                 </div>
 
-                {/* Textarea claramente delimitado */}
                 <Textarea
                   value={novaAlteracaoTexto}
                   onChange={(e) => setNovaAlteracaoTexto(e.target.value)}
@@ -1184,7 +1253,7 @@ export default function DemandaDrawer({
                   className="resize-none text-xs bg-background border-border text-foreground focus:ring-1 focus:ring-primary shadow-xs rounded-lg"
                 />
 
-                {/* Bloco 'Estender prazo' recolhido por padrão com toggle simples */}
+                {/* Bloco 'Estender prazo' recolhido por padrão */}
                 <div className="pt-0.5">
                   {!estenderPrazoAberto && diasAdicionarPrazo === 0 ? (
                     <button
@@ -1203,7 +1272,6 @@ export default function DemandaDrawer({
                           <span>Estender prazo:</span>
                         </div>
 
-                        {/* Stepper + / - unificado como controle visual compacto */}
                         <div className="inline-flex items-center rounded-md border border-border/70 bg-background overflow-hidden shadow-2xs">
                           <button
                             type="button"
@@ -1230,7 +1298,6 @@ export default function DemandaDrawer({
                         </div>
                       </div>
 
-                      {/* Atalhos Rápidos de Dias (+1d, +2d, +3d, +5d) com mesmo tamanho */}
                       <div className="flex items-center justify-between gap-1 pt-0.5">
                         <span className="text-[10px] text-muted-foreground">Atalhos:</span>
                         <div className="flex items-center gap-1">
@@ -1261,7 +1328,6 @@ export default function DemandaDrawer({
                         </div>
                       </div>
 
-                      {/* Preview do Novo Prazo com foco na data */}
                       {previewNovoPrazo && (
                         <div className="flex items-center justify-between text-[11px] px-2.5 py-1 rounded-md bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 text-muted-foreground font-normal">
                           <span className="flex items-center gap-1">
@@ -1277,7 +1343,6 @@ export default function DemandaDrawer({
                   )}
                 </div>
 
-                {/* Botão Registrar Alteração: Primário da seção sem ser botão branco agressivo no Dark Mode */}
                 <button
                   type="button"
                   onClick={handleSubmeterNovaAlteracao}
@@ -1297,111 +1362,210 @@ export default function DemandaDrawer({
                 </button>
               </div>
 
-              {/* Sub-abas de Visualização: Tabs simplificadas */}
-              <div className="flex items-center gap-4 pt-2 border-b border-border/40 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setAbaAlteracoesFiltro('todas')}
-                  className={`pb-1.5 border-b-2 font-medium transition cursor-pointer flex items-center gap-1.5 ${
-                    abaAlteracoesFiltro === 'todas'
-                      ? 'border-primary text-foreground font-semibold'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <span>Alterações</span>
-                  <span className="text-[10px] text-muted-foreground">({alteracoesHistorico.length})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAbaAlteracoesFiltro('prazos')}
-                  className={`pb-1.5 border-b-2 font-medium transition cursor-pointer flex items-center gap-1.5 ${
-                    abaAlteracoesFiltro === 'prazos'
-                      ? 'border-primary text-foreground font-semibold'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <span>Histórico de Prazos</span>
-                  <span className="text-[10px] text-muted-foreground">({historicoPrazos.length})</span>
-                </button>
+              {/* Título da Timeline de Alterações */}
+              <div className="pt-2 pb-1 border-b border-border/40 flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/90">
+                  Alterações Registradas
+                </span>
+                <span className="text-[10px] text-muted-foreground font-medium">
+                  {alteracoesHistorico.length} {alteracoesHistorico.length === 1 ? 'registro' : 'registros'}
+                </span>
               </div>
 
-              {/* Timeline simples para Alterações */}
-              {abaAlteracoesFiltro === 'todas' && (
-                <div className="pt-1">
-                  {alteracoesHistorico.length === 0 ? (
-                    <div className="text-center py-6 px-4 text-xs text-muted-foreground/60 italic">
-                      Nenhuma alteração registrada ainda para esta demanda.
-                    </div>
-                  ) : (
-                    <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-px before:bg-border/60 pl-6">
-                      {alteracoesHistorico.map((alt, idx) => {
-                        const autorNome = alt.usuario?.nome || alt.autor || 'Sistema';
-                        const dataFormatada = alt.data ? formatarDataHistorico(alt.data) : 'Data não informada';
-                        const textoAlteracao = alt.texto || alt.descricao || '';
-                        const isUltima = idx === 0;
+              {/* Timeline dedicada exclusivamente a Alterações */}
+              <div className="pt-1">
+                {alteracoesHistorico.length === 0 ? (
+                  <div className="text-center py-6 px-4 text-xs text-muted-foreground/60 italic">
+                    Nenhuma alteração registrada ainda para esta demanda.
+                  </div>
+                ) : (
+                  <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-px before:bg-border/60 pl-6">
+                    {alteracoesHistorico.map((alt, idx) => {
+                      const autorNome = alt.usuario?.nome || alt.autor || 'Sistema';
+                      const dataFormatada = alt.data ? formatarDataHistorico(alt.data) : 'Data não informada';
+                      const textoAlteracao = alt.texto || alt.descricao || '';
+                      const isUltima = idx === 0;
 
-                        return (
-                          <div key={idx} className="relative space-y-1 text-xs">
-                            <div className={`absolute -left-[23px] top-1 h-2 w-2 rounded-full ${isUltima ? 'bg-primary' : 'bg-muted-foreground/40'} ring-4 ring-card`} />
-                            
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-semibold text-foreground truncate">
-                                  {autorNome}
-                                </span>
-                                {isUltima && (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-muted text-muted-foreground border border-border/60">
-                                    Mais recente
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums font-normal">
-                                {dataFormatada}
-                              </span>
-                            </div>
-
-                            <p className="text-xs text-foreground/90 leading-relaxed break-words font-normal">
-                              {textoAlteracao}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Timeline simples para Histórico de Prazos */}
-              {abaAlteracoesFiltro === 'prazos' && (
-                <div className="pt-1">
-                  {historicoPrazos.length === 0 ? (
-                    <div className="text-center py-6 px-4 text-xs text-muted-foreground/60 italic">
-                      Nenhum ajuste de prazo registrado ainda.
-                    </div>
-                  ) : (
-                    <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-px before:bg-border/60 pl-6">
-                      {historicoPrazos.map((alt, idx) => {
-                        const autorNome = alt.usuario?.nome || alt.autor || 'Sistema';
-                        const dataFormatada = alt.data ? formatarDataHistorico(alt.data) : 'Hoje';
-                        const motivo = alt.motivo || alt.texto || alt.descricao || '';
-                        const deFormatado = alt.prazo_antigo ? formatarPrazo(alt.prazo_antigo) || alt.prazo_antigo : 'Sem prazo';
-                        const paraFormatado = alt.prazo_novo ? formatarPrazo(alt.prazo_novo) || alt.prazo_novo : 'Sem prazo';
-                        const dias = alt.dias_ajustados;
-
-                        return (
-                          <div key={idx} className="relative space-y-1.5 text-xs">
-                            <div className="absolute -left-[23px] top-1 h-2 w-2 rounded-full bg-amber-500 ring-4 ring-card" />
-
-                            <div className="flex items-center justify-between gap-2">
+                      return (
+                        <div key={idx} className="relative space-y-1 text-xs">
+                          <div className={`absolute -left-[23px] top-1 h-2 w-2 rounded-full ${isUltima ? 'bg-primary' : 'bg-muted-foreground/40'} ring-4 ring-card`} />
+                          
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
                               <span className="font-semibold text-foreground truncate">
                                 {autorNome}
                               </span>
-                              <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums font-normal">
-                                {dataFormatada}
-                              </span>
+                              {isUltima && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-muted text-muted-foreground border border-border/60">
+                                  Mais recente
+                                </span>
+                              )}
                             </div>
+                            <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums font-normal">
+                              {dataFormatada}
+                            </span>
+                          </div>
 
+                          <p className="text-xs text-foreground/90 leading-relaxed break-words font-normal">
+                            {textoAlteracao}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          ) : (
+            /* Aba: HISTÓRICO DE PRAZOS (Aba Única e Exclusiva, sem alterações de texto) */
+            <div className="space-y-4">
+
+              {/* Cabeçalho informativo com Prazo Acordado e Data de Entrega (Separados!) */}
+              <div className="p-3 rounded-lg border border-border/60 bg-muted/20 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  {/* Prazo */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Clock size={14} className="text-amber-500 shrink-0" />
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                        Prazo Acordado
+                      </div>
+                      <div className="text-xs font-semibold text-foreground">
+                        {demanda.prazo ? (
+                          <span className={prazoTexto?.isCongelado ? 'text-amber-600 dark:text-amber-400' : prazoTexto?.isHoje ? 'text-amber-500' : prazoTexto?.isVencido ? 'text-rose-500' : ''}>
+                            {formatarPrazo(demanda.prazo)}
+                            {prazoTexto?.isCongelado ? ' (Pausado)' : prazoTexto?.isHoje ? ' (Hoje)' : prazoTexto?.isVencido ? ' (Atrasado)' : ''}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/60 italic">Sem prazo</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ação rápida alterar prazo */}
+                  <Popover open={prazoPopoverDetalhesOpen} onOpenChange={setPrazoPopoverDetalhesOpen}>
+                    <PopoverTrigger asChild disabled={!canEdit}>
+                      <button
+                        type="button"
+                        className="px-2 py-1 rounded-md text-xs font-medium border border-border/70 bg-background hover:bg-muted text-foreground transition cursor-pointer disabled:cursor-default"
+                      >
+                        Alterar prazo
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 bg-popover border-border text-popover-foreground" align="end">
+                      <Calendar
+                        mode="single"
+                        selected={prazoDate}
+                        onSelect={handleSelectPrazo}
+                        locale={ptBR}
+                        initialFocus
+                        className="bg-popover text-popover-foreground rounded-lg"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Linha separada para Data de Entrega com Botão de Marcar/Desmarcar */}
+                <div className="flex items-center justify-between pt-2 border-t border-border/40 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle2
+                      size={14}
+                      className={demanda.entregue_em ? 'text-emerald-500 fill-emerald-500/20 shrink-0' : 'text-muted-foreground/50 shrink-0'}
+                    />
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                        Data de Entrega
+                      </div>
+                      <div className="text-xs font-medium text-foreground">
+                        {demanda.entregue_em ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                            Entregue em {formatarPrazo(demanda.entregue_em)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/70">Não entregue</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onQuickUpdate?.(demanda, {
+                          entregue_em: demanda.entregue_em ? null : new Date().toISOString(),
+                        });
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                        demanda.entregue_em
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30'
+                          : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border border-border/70'
+                      }`}
+                    >
+                      <CheckCircle2 size={13} className={demanda.entregue_em ? 'fill-emerald-500/20' : ''} />
+                      <span>{demanda.entregue_em ? 'Desmarcar entrega' : 'Definir como entregue'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Título da Linha do Tempo */}
+              <div className="pt-1 pb-1 border-b border-border/40 flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/90">
+                  Histórico de Ajustes e Entregas
+                </span>
+                <span className="text-[10px] text-muted-foreground font-medium">
+                  {historicoPrazos.length} {historicoPrazos.length === 1 ? 'registro' : 'registros'}
+                </span>
+              </div>
+
+              {/* Timeline dedicada exclusivamente a Histórico de Prazos e Entregas */}
+              <div className="pt-1">
+                {historicoPrazos.length === 0 ? (
+                  <div className="text-center py-8 px-4 text-xs text-muted-foreground/60 italic">
+                    Nenhum ajuste de prazo ou registro de entrega ainda para esta demanda.
+                  </div>
+                ) : (
+                  <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-px before:bg-border/60 pl-6">
+                    {historicoPrazos.map((alt, idx) => {
+                      const autorNome = alt.usuario?.nome || alt.autor || 'Sistema';
+                      const dataFormatada = alt.data ? formatarDataHistorico(alt.data) : 'Hoje';
+                      const motivo = alt.motivo || alt.texto || alt.descricao || '';
+                      const isEntrega = alt.tipo === 'entrega';
+                      const deFormatado = alt.prazo_antigo ? formatarPrazo(alt.prazo_antigo) || alt.prazo_antigo : 'Sem prazo';
+                      const paraFormatado = alt.prazo_novo ? formatarPrazo(alt.prazo_novo) || alt.prazo_novo : 'Sem prazo';
+                      const dias = alt.dias_ajustados;
+                      const isUltima = idx === 0;
+
+                      return (
+                        <div key={idx} className="relative space-y-1.5 text-xs">
+                          <div
+                            className={`absolute -left-[23px] top-1 h-2 w-2 rounded-full ${
+                              isEntrega
+                                ? 'bg-emerald-500'
+                                : isUltima
+                                ? 'bg-amber-500'
+                                : 'bg-muted-foreground/40'
+                            } ring-4 ring-card`}
+                          />
+
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-foreground truncate">
+                              {autorNome}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums font-normal">
+                              {dataFormatada}
+                            </span>
+                          </div>
+
+                          {isEntrega ? (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                              <CheckCircle2 size={13} className="shrink-0" />
+                              <span>{alt.texto || alt.descricao || 'Entrega registrada'}</span>
+                            </div>
+                          ) : (
                             <div className="flex items-center gap-1.5 text-xs text-foreground">
                               <span className="text-muted-foreground line-through">{deFormatado}</span>
                               <ArrowRight size={11} className="text-muted-foreground shrink-0" />
@@ -1412,19 +1576,19 @@ export default function DemandaDrawer({
                                 </span>
                               )}
                             </div>
+                          )}
 
-                            {motivo && (
-                              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                {motivo}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
+                          {motivo && !isEntrega && (
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                              {motivo}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
             </div>
           )}

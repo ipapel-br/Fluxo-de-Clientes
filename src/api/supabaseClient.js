@@ -235,6 +235,9 @@ export function createSupabaseEntityApi(entityName) {
           currentPayload.etiquetas = currentPayload.etiqueta ? [currentPayload.etiqueta] : [];
           delete currentPayload.etiqueta;
         }
+        if (!currentPayload.status_id || currentPayload.status_id === '') {
+          currentPayload.status_id = null;
+        }
       }
 
       for (let attempt = 0; attempt < 4; attempt++) {
@@ -288,6 +291,9 @@ export function createSupabaseEntityApi(entityName) {
         if (currentPayload.etiqueta !== undefined) {
           currentPayload.etiquetas = currentPayload.etiqueta ? [currentPayload.etiqueta] : [];
           delete currentPayload.etiqueta;
+        }
+        if (currentPayload.status_id !== undefined && (!currentPayload.status_id || currentPayload.status_id === '')) {
+          currentPayload.status_id = null;
         }
       }
 

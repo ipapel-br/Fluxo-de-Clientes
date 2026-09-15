@@ -62,6 +62,7 @@ export default function DemandaForm({
 
   useEffect(() => {
     if (open) {
+      const defaultStatusId = (statuses && statuses[0]?.id) || '';
       const base = demanda
         ? {
             cliente: demanda.cliente || '',
@@ -73,16 +74,19 @@ export default function DemandaForm({
             fase_arte: demanda.fase_arte || 'parado',
             complexidade: demanda.complexidade || 'normal',
             prazo: demanda.prazo || '',
-            status_id: demanda.status_id || '',
+            status_id: demanda.status_id || defaultStatusId,
             etiqueta: demanda.etiqueta || '',
             acabamento: demanda.acabamento || 'Autocolante',
             observacao: demanda.observacao || '',
           }
-        : VAZIO;
+        : {
+            ...VAZIO,
+            status_id: defaultStatusId,
+          };
       setForm(base);
       setHistoricoOpen(false);
     }
-  }, [open, demanda]);
+  }, [open, demanda, statuses]);
 
   function set(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -470,12 +474,6 @@ export default function DemandaForm({
                 value={form.status_id}
                 onChange={(v) => {
                   set('status_id', v);
-                  const st = statuses.find((s) => s.id === v);
-                  const stAnterior = statuses.find((s) => s.id === form.status_id);
-                  const ehSemBriefing = isStatusSemBriefing(st) || isStatusSemBriefing(stAnterior);
-                  if (!ehSemBriefing && st && (isStatusAmostra(st) || isStatusCriacao(st)) && form.status_id !== v) {
-                    set('prazo', calcularPrazoFuturo(1));
-                  }
                 }}
                 onCriarNovo={onCriarStatus}
                 onGerenciar={onGerenciarStatus}

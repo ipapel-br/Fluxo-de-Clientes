@@ -277,6 +277,28 @@ export default function Prioridades() {
     let revisao = 0;
 
     ativas.forEach((d) => {
+      const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
+      const demTexto = (d.demanda || '').toLowerCase();
+
+      // Identificação precisa de Amostra e Revisão
+      const isAmostra =
+        isStatusAmostra(d, statusMap) ||
+        d.status_id === 'status_amostra' ||
+        stNome.includes('amostra');
+
+      const isRevisao =
+        isStatusRevisao(d, statusMap) ||
+        d.status_id === 'status_revisao' ||
+        stNome.includes('revis');
+
+      if (isAmostra) amostra++;
+      if (isRevisao) revisao++;
+
+      // Se for Amostra ou Revisão, NÃO conta nas abas principais da fila regular
+      if (isAmostra || isRevisao) {
+        return;
+      }
+
       // Minhas (Designer ou Vendedor atribuído)
       if (
         userName &&
@@ -296,34 +318,22 @@ export default function Prioridades() {
       const et = (d.etiqueta || '').toLowerCase();
       if (et === 'alta' || et === 'urgente') altaPrioridade++;
 
-      const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
-      const demTexto = (d.demanda || '').toLowerCase();
-
-      // Pendente (Status ou Demanda/Etapa com 'amostra' ou 'revisão'/'revisao')
+      // Pendente da fila geral
       const isPendente =
-        stNome.includes('amostra') ||
-        stNome.includes('revis') ||
-        demTexto.includes('amostra') ||
-        demTexto.includes('revis');
+        stNome.includes('pendente') ||
+        demTexto.includes('pendente');
       if (isPendente) pendente++;
-
-      // Amostra (Status de Amostra)
-      const isAmostra =
-        isStatusAmostra(d, statusMap) ||
-        d.status_id === 'status_amostra' ||
-        stNome.includes('amostra');
-      if (isAmostra) amostra++;
-
-      // Revisão (Status de Revisão)
-      const isRevisao =
-        isStatusRevisao(d, statusMap) ||
-        d.status_id === 'status_revisao' ||
-        stNome.includes('revis');
-      if (isRevisao) revisao++;
     });
 
+    const totalFilaRegular = ativas.filter((d) => {
+      const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
+      const isAmostra = isStatusAmostra(d, statusMap) || d.status_id === 'status_amostra' || stNome.includes('amostra');
+      const isRevisao = isStatusRevisao(d, statusMap) || d.status_id === 'status_revisao' || stNome.includes('revis');
+      return !isAmostra && !isRevisao;
+    }).length;
+
     return {
-      todas: ativas.length,
+      todas: totalFilaRegular,
       minhas,
       hoje,
       atrasadas,
@@ -376,34 +386,7 @@ export default function Prioridades() {
     const userName = (usuario?.nome || '').toLowerCase().trim();
 
     // Filtro por Aba Rápida
-    if (filtros.aba === 'minhas') {
-      result = result.filter(
-        (d) =>
-          (d.designer || '').toLowerCase().trim() === userName ||
-          (d.vendedor || '').toLowerCase().trim() === userName ||
-          d.seller_id === usuario?.id
-      );
-    } else if (filtros.aba === 'hoje') {
-      result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'hoje');
-    } else if (filtros.aba === 'atrasadas') {
-      result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'vencido');
-    } else if (filtros.aba === 'alta_prioridade') {
-      result = result.filter((d) => {
-        const et = (d.etiqueta || '').toLowerCase();
-        return et === 'alta' || et === 'urgente';
-      });
-    } else if (filtros.aba === 'pendente') {
-      result = result.filter((d) => {
-        const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
-        const demTexto = (d.demanda || '').toLowerCase();
-        return (
-          stNome.includes('amostra') ||
-          stNome.includes('revis') ||
-          demTexto.includes('amostra') ||
-          demTexto.includes('revis')
-        );
-      });
-    } else if (filtros.aba === 'amostra') {
+    if (filtros.aba === 'amostra') {
       result = result.filter((d) => {
         const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
         return (
@@ -433,6 +416,39 @@ export default function Prioridades() {
           stNome.includes('revis')
         );
       });
+    } else {
+      // Em TODAS as outras abas (Todas, Minhas, Hoje, Atrasadas, Alta Prioridade, Pendente):
+      // NENHUMA demanda em Amostra ou Revisão deve aparecer, ficando exclusivamente nas suas abas!
+      result = result.filter((d) => {
+        const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
+        const isAmostra = isStatusAmostra(d, statusMap) || d.status_id === 'status_amostra' || stNome.includes('amostra');
+        const isRevisao = isStatusRevisao(d, statusMap) || d.status_id === 'status_revisao' || stNome.includes('revis');
+        return !isAmostra && !isRevisao;
+      });
+
+      if (filtros.aba === 'minhas') {
+        result = result.filter(
+          (d) =>
+            (d.designer || '').toLowerCase().trim() === userName ||
+            (d.vendedor || '').toLowerCase().trim() === userName ||
+            d.seller_id === usuario?.id
+        );
+      } else if (filtros.aba === 'hoje') {
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'hoje');
+      } else if (filtros.aba === 'atrasadas') {
+        result = result.filter((d) => tipoAlertaPrazo(d.prazo, d, statusMap) === 'vencido');
+      } else if (filtros.aba === 'alta_prioridade') {
+        result = result.filter((d) => {
+          const et = (d.etiqueta || '').toLowerCase();
+          return et === 'alta' || et === 'urgente';
+        });
+      } else if (filtros.aba === 'pendente') {
+        result = result.filter((d) => {
+          const stNome = (statusMap[d.status_id]?.nome || '').toLowerCase();
+          const demTexto = (d.demanda || '').toLowerCase();
+          return stNome.includes('pendente') || demTexto.includes('pendente');
+        });
+      }
     }
 
     // Filtros secundários
@@ -888,8 +904,11 @@ export default function Prioridades() {
     const maxOrdem = ativas.reduce((m, d) => Math.max(m, d.ordem ?? 0), -1);
     const maxFactoryOrdem = demandas.reduce((m, d) => Math.max(m, d.factory_position ?? 0), -1);
 
+    const statusIdFinal = data.status_id || statuses[0]?.id || null;
+
     const nova = await localClient.entities.Demanda.create({
       ...data,
+      status_id: statusIdFinal,
       fase_arte: data.fase_arte || 'parado',
       historico,
       ordem: maxOrdem + 1,
@@ -1085,30 +1104,9 @@ export default function Prioridades() {
       const eraSemBriefingOrigem = isStatusSemBriefing(demanda.status_id, statusMap);
 
       if (!ehSemBriefingDestino && !eraSemBriefingOrigem) {
-        // Se voltar ou mudar para Amostra: coloca prazo de 1 dia automaticamente!
-        if (isStatusAmostra(patch.status_id, statusMap)) {
-          if (!patch.prazo) {
-            patch.prazo = calcularPrazoFuturo(1);
-          }
+        // Se voltar ou mudar para Amostra ou Criação: desmarca entregue_em se houver, sem alterar o prazo original
+        if (isStatusAmostra(patch.status_id, statusMap) || isStatusCriacao(patch.status_id, statusMap)) {
           patch.entregue_em = null;
-        }
-
-        // Se voltar ou mudar para Criação: recalcula o prazo automaticamente (Data de Retorno + 1 dia útil)!
-        if (isStatusCriacao(patch.status_id, statusMap)) {
-          if (!patch.prazo) {
-            patch.prazo = calcularPrazoFuturo(1);
-          }
-          patch.entregue_em = null;
-        }
-
-        // Se mover para Revisão: registra a entrega na data de hoje e ajusta o prazo para a entrega!
-        if (isStatusRevisao(patch.status_id, statusMap)) {
-          const hoje = new Date();
-          const y = hoje.getFullYear();
-          const m = String(hoje.getMonth() + 1).padStart(2, '0');
-          const d = String(hoje.getDate()).padStart(2, '0');
-          patch.entregue_em = hoje.toISOString();
-          patch.prazo = `${y}-${m}-${d}`;
         }
       }
     }

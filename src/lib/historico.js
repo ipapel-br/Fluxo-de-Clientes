@@ -42,14 +42,55 @@ export function entradaStatus(deNome, paraNome, usuario, data = agoraIso()) {
 }
 
 export function entradaPrazo(de, para, usuario, data = agoraIso()) {
-  const fmt = (v) =>
-    v ? format(new Date(v), 'dd/MM/yyyy', { locale: ptBR }) : 'sem prazo';
+  const fmt = (v) => {
+    if (!v) return 'sem prazo';
+    try {
+      const parts = String(v).split('T')[0].split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return format(new Date(v), 'dd/MM/yyyy', { locale: ptBR });
+    } catch {
+      return v;
+    }
+  };
   return {
     texto: `Prazo alterado de ${fmt(de)} para ${fmt(para)}`,
     data,
     tipo: 'prazo',
     prazo_antigo: de,
     prazo_novo: para,
+    usuario: usuario ? { nome: usuario.nome, email: usuario.email } : null,
+  };
+}
+
+export function entradaEntrega(dataEntrega, usuario, data = agoraIso()) {
+  const fmt = (v) => {
+    if (!v) return '';
+    try {
+      return format(new Date(v), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    } catch {
+      return v;
+    }
+  };
+  const dataFmt = fmt(dataEntrega);
+  return {
+    texto: dataFmt ? `Demanda marcada como entregue (${dataFmt})` : 'Demanda marcada como entregue',
+    descricao: dataFmt ? `Entrega registrada: ${dataFmt}` : 'Entrega registrada',
+    data,
+    tipo: 'entrega',
+    entregue_em: dataEntrega,
+    usuario: usuario ? { nome: usuario.nome, email: usuario.email } : null,
+  };
+}
+
+export function entradaDesmarcarEntrega(usuario, data = agoraIso()) {
+  return {
+    texto: 'Marcação de entrega removida',
+    descricao: 'Entrega desmarcada',
+    data,
+    tipo: 'entrega',
+    entregue_em: null,
     usuario: usuario ? { nome: usuario.nome, email: usuario.email } : null,
   };
 }
@@ -247,6 +288,13 @@ export function gerarEntradasEdicao(antigo, novo, statusMap, usuario) {
   }
   if ((antigo.factory_status || '') !== (novo.factory_status || '') && novo.factory_status) {
     entradas.push(entradaStatusFabrica(antigo.factory_status, novo.factory_status, usuario, agora));
+  }
+  if ((antigo.entregue_em || null) !== (novo.entregue_em || null)) {
+    if (novo.entregue_em) {
+      entradas.push(entradaEntrega(novo.entregue_em, usuario, agora));
+    } else {
+      entradas.push(entradaDesmarcarEntrega(usuario, agora));
+    }
   }
   return entradas;
 }

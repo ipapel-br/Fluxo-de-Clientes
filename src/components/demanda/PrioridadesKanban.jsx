@@ -489,12 +489,13 @@ export default function PrioridadesKanban({
                               <div className="flex items-center justify-between gap-1 pt-2 border-t border-border/40 text-[11px]">
                                 {/* Prazo */}
                                 <div className="flex items-center gap-1 min-w-0">
-                                  {demanda.prazo ? (
+                                  {demanda.prazo || alerta === 'entregue' ? (
                                     alerta === 'entregue' ? (
-                                      <span className="font-semibold flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400" title="Arte entregue em revisão">
+                                      <span className="font-semibold flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400" title={`Prazo: ${formatarPrazo(demanda.prazo) || 'Sem prazo'} · Entregue em: ${formatarPrazo(obterDataEntregaRevisao(demanda))}`}>
                                         <CheckCircle2 size={11} className="shrink-0" />
                                         <span className="truncate">
-                                          Entregue · {formatarPrazo(obterDataEntregaRevisao(demanda) || demanda.prazo)}
+                                          {demanda.prazo ? formatarPrazo(demanda.prazo) : 'Sem prazo'}
+                                          {obterDataEntregaRevisao(demanda) ? ` · Entregue ${formatarPrazo(obterDataEntregaRevisao(demanda))}` : ' · Entregue'}
                                         </span>
                                       </span>
                                     ) : alerta === 'congelado' ? (

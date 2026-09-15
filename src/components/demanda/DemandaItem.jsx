@@ -101,10 +101,13 @@ export default function DemandaItem({
   // Formatação do Prazo e Status
   const prazoTexto = (() => {
     if (alerta === 'entregue') {
-      const dataEntregue = obterDataEntregaRevisao(demanda) || demanda.prazo;
+      const dataEntregue = obterDataEntregaRevisao(demanda);
+      const dataEntregueFormatada = dataEntregue ? formatarPrazo(dataEntregue) : '';
+      const statusLabel = dataEntregueFormatada ? `Entregue ${dataEntregueFormatada}` : 'Entregue';
       return {
-        data: dataEntregue ? formatarPrazo(dataEntregue) : 'Entregue',
-        status: 'Entregue',
+        data: demanda.prazo ? formatarPrazo(demanda.prazo) : 'Sem prazo',
+        dataEntregue: dataEntregueFormatada,
+        status: statusLabel,
         isEntregue: true,
       };
     }
@@ -297,18 +300,18 @@ export default function DemandaItem({
               )}
             </div>
 
-            {/* Coluna 4: PRAZO (Edição Direta via Calendar Popover) */}
-            <div className="col-span-2 sm:col-span-1 flex flex-col justify-center min-w-0 leading-tight" onClick={(e) => e.stopPropagation()}>
+            {/* Coluna 4: PRAZO (Edição Direta via Calendar Popover + Botão Marcar como Entregue) */}
+            <div className="col-span-2 sm:col-span-1 flex items-center justify-between gap-1.5 min-w-0 leading-tight" onClick={(e) => e.stopPropagation()}>
               <Popover open={prazoPopoverOpen} onOpenChange={setPrazoPopoverOpen}>
                 <PopoverTrigger asChild disabled={!canEdit}>
                   <button
                     type="button"
-                    className="flex flex-col text-left hover:opacity-80 transition cursor-pointer disabled:cursor-default"
+                    className="flex flex-col text-left hover:opacity-80 transition cursor-pointer disabled:cursor-default min-w-0 flex-1"
                   >
                     {prazoTexto ? (
                       <>
                         <span
-                          className={`font-semibold text-xs ${
+                          className={`font-semibold text-xs truncate ${
                             prazoTexto.isEntregue
                               ? 'text-emerald-600 dark:text-emerald-400'
                               : prazoTexto.isCongelado
@@ -324,7 +327,7 @@ export default function DemandaItem({
                         </span>
                         {prazoTexto.status && (
                           <span
-                            className={`text-[10px] font-medium flex items-center gap-0.5 ${
+                            className={`text-[10px] font-medium flex items-center gap-0.5 truncate ${
                               prazoTexto.isEntregue
                                 ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
                                 : prazoTexto.isCongelado
@@ -334,7 +337,7 @@ export default function DemandaItem({
                           >
                             {prazoTexto.isEntregue && <CheckCircle2 size={10} className="shrink-0" />}
                             {prazoTexto.isCongelado && <PauseCircle size={10} className="shrink-0" />}
-                            {prazoTexto.status}
+                            <span className="truncate">{prazoTexto.status}</span>
                           </span>
                         )}
                       </>
@@ -354,6 +357,31 @@ export default function DemandaItem({
                   />
                 </PopoverContent>
               </Popover>
+
+              {/* Botão de alternar se foi entregue ou não ao lado do prazo */}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onQuickUpdate?.(demanda, {
+                      entregue_em: demanda.entregue_em ? null : new Date().toISOString(),
+                    });
+                  }}
+                  className={`shrink-0 p-1 rounded-md transition cursor-pointer ${
+                    demanda.entregue_em
+                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25'
+                      : 'text-muted-foreground/35 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-muted/80'
+                  }`}
+                  title={
+                    demanda.entregue_em
+                      ? `Entregue em ${formatarPrazo(demanda.entregue_em)}. Clique para desmarcar`
+                      : 'Marcar como entregue'
+                  }
+                  aria-label={demanda.entregue_em ? 'Desmarcar entrega' : 'Marcar como entregue'}
+                >
+                  <CheckCircle2 size={15} className={demanda.entregue_em ? 'fill-emerald-500/20' : ''} />
+                </button>
+              )}
             </div>
 
             {/* Coluna 5: STATUS (Edição Direta via Menu de Status da Fila com cores destacadas) */}
@@ -396,15 +424,7 @@ export default function DemandaItem({
                           const patch = { status_id: st.id };
                           const ehSemBriefing = isStatusSemBriefing(st) || isStatusSemBriefing(status);
                           if (!ehSemBriefing && (isStatusAmostra(st) || isStatusCriacao(st))) {
-                            patch.prazo = calcularPrazoFuturo(1);
                             patch.entregue_em = null;
-                          } else if (isStatusRevisao(st)) {
-                            const hoje = new Date();
-                            const y = hoje.getFullYear();
-                            const m = String(hoje.getMonth() + 1).padStart(2, '0');
-                            const d = String(hoje.getDate()).padStart(2, '0');
-                            patch.entregue_em = hoje.toISOString();
-                            patch.prazo = `${y}-${m}-${d}`;
                           }
                           onQuickUpdate?.(demanda, patch);
                         }}
