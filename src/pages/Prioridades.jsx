@@ -368,7 +368,7 @@ export default function Prioridades() {
 
   const filtrando = Boolean(
     filtros.busca ||
-    filtros.aba !== 'todas' ||
+    (filtros.aba !== 'todas' && filtros.aba !== 'minhas') ||
     filtros.vendedor ||
     filtros.revenda ||
     filtros.designer ||
@@ -795,9 +795,21 @@ export default function Prioridades() {
     }
 
     // Caso 2: Reordenação na lista principal (droppableId = "fila")
+    const movido = visiveis[source.index];
+    const itemDestino = visiveis[destination.index];
+    if (!movido || !itemDestino) return;
+
     const itens = [...ativas];
-    const [movido] = itens.splice(source.index, 1);
-    itens.splice(destination.index, 0, movido);
+    const sourceIndexGeral = itens.findIndex((d) => d.id === movido.id);
+    if (sourceIndexGeral === -1) return;
+
+    itens.splice(sourceIndexGeral, 1);
+    const destIndexGeral = itens.findIndex((d) => d.id === itemDestino.id);
+    const novoIndexGeral = destIndexGeral === -1
+      ? (destination.index > source.index ? itens.length : 0)
+      : (destination.index > source.index ? destIndexGeral + 1 : destIndexGeral);
+
+    itens.splice(novoIndexGeral, 0, movido);
 
     // Atualiza ordem e design_position sem alterar factory_position
     const novos = itens.map((d, i) => ({ id: d.id, ordem: i, design_position: i }));
@@ -811,8 +823,8 @@ export default function Prioridades() {
     const entradaHist = entradaReordenacaoPrioridade(source.index, destination.index, usuario);
     const movidoAtualizado = {
       ...movido,
-      ordem: destination.index,
-      design_position: destination.index,
+      ordem: novoIndexGeral,
+      design_position: novoIndexGeral,
       historico: [entradaHist, ...(movido.historico || [])],
     };
 
@@ -1624,7 +1636,11 @@ export default function Prioridades() {
           </div>
         ) : visiveis.length === 0 ? (
           <div className="text-center py-20 text-muted-foreground rounded-2xl border border-dashed border-border bg-card/40 p-8">
-            {filtrando ? 'Nenhuma demanda encontrada com os filtros.' : 'Nenhuma demanda ativa. Clique em "+ Nova demanda" para começar.'}
+            {filtros.aba === 'minhas'
+              ? 'Você não possui demandas atribuídas no momento.'
+              : filtrando
+              ? 'Nenhuma demanda encontrada com os filtros.'
+              : 'Nenhuma demanda ativa. Clique em "+ Nova demanda" para começar.'}
           </div>
         ) : (viewMode === 'kanban' && filtros.aba === 'todas') ? (
           /* Visualização em Kanban por Status (apenas na aba "Todas") */

@@ -175,69 +175,6 @@ export default function Filtros({
 
         <button
           type="button"
-          onClick={() => setFiltros({ ...filtros, aba: 'hoje' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
-            filtros.aba === 'hoje'
-              ? 'bg-secondary text-foreground font-semibold border border-border shadow-xs'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-          }`}
-        >
-          <span>Hoje</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-md text-[11px] font-semibold ${
-              filtros.aba === 'hoje'
-                ? 'bg-muted-foreground/15 text-foreground'
-                : 'text-muted-foreground'
-            }`}
-          >
-            {contadores.hoje}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setFiltros({ ...filtros, aba: 'atrasadas' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
-            filtros.aba === 'atrasadas'
-              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-300 font-semibold border border-rose-500/30 shadow-xs'
-              : 'text-rose-600/90 dark:text-rose-400/90 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-500/10'
-          }`}
-        >
-          <span className="font-semibold text-rose-600 dark:text-rose-400">Atrasadas</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-md text-[11px] font-bold ${
-              filtros.aba === 'atrasadas'
-                ? 'bg-rose-500/25 text-rose-700 dark:text-rose-200'
-                : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-            }`}
-          >
-            {contadores.atrasadas}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setFiltros({ ...filtros, aba: 'alta_prioridade' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
-            filtros.aba === 'alta_prioridade'
-              ? 'bg-secondary text-foreground font-semibold border border-border shadow-xs'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-          }`}
-        >
-          <span>Alta prioridade</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-md text-[11px] font-semibold ${
-              filtros.aba === 'alta_prioridade'
-                ? 'bg-muted-foreground/15 text-foreground'
-                : 'text-muted-foreground'
-            }`}
-          >
-            {contadores.altaPrioridade}
-          </span>
-        </button>
-
-        <button
-          type="button"
           onClick={() => setFiltros({ ...filtros, aba: 'pendente' })}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
             filtros.aba === 'pendente'
